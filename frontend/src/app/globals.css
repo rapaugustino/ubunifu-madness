@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #f0f0f5;
+  --card: #13131a;
+  --card-border: #1e1e2e;
+  --accent: #f97316;
+  --accent-secondary: #fb923c;
+  --muted: #71717a;
+  --success: #22c55e;
+  --danger: #ef4444;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-accent: var(--accent);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-muted: var(--muted);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* Probability bar animation */
+@keyframes fillBar {
+  from { width: 0%; }
+}
+
+.prob-bar {
+  animation: fillBar 0.8s ease-out;
+}
+
+/* Glow effect for accent elements */
+.glow-accent {
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+}
+
+/* Glass card effect */
+.glass {
+  background: rgba(19, 19, 26, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 30, 46, 0.6);
+}

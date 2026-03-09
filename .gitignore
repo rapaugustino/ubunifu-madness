@@ -1,0 +1,40 @@
+# Data (too large for git — download from Kaggle)
+data/raw/
+data/processed/
+*.csv
+
+# Submissions (contain predictions — keep local)
+submissions/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Environment variables
+.env
+.env.*
+
+# Model artifacts
+*.pkl
+*.joblib
+*.model
+
+# Node (frontend)
+node_modules/
+.next/
+out/
