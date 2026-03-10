@@ -45,9 +45,11 @@ _CONF_ALIAS_MAP = {
 
 # --- Rate limiting ---
 RATE_WINDOW_SHORT = 600   # 10 minutes
-RATE_LIMIT_SHORT = 20
+RATE_LIMIT_SHORT = 10
 RATE_WINDOW_LONG = 3600   # 1 hour
-RATE_LIMIT_LONG = 60
+RATE_LIMIT_LONG = 30
+RATE_WINDOW_DAILY = 86400  # 24 hours
+RATE_LIMIT_DAILY = 100
 
 _rate_store: dict[str, list[float]] = defaultdict(list)
 
@@ -55,13 +57,16 @@ _rate_store: dict[str, list[float]] = defaultdict(list)
 def _check_rate_limit(ip: str):
     """Raise 429 if IP exceeds rate limits."""
     now = time.time()
-    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW_LONG]
+    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW_DAILY]
     timestamps = _rate_store[ip]
     recent_short = sum(1 for t in timestamps if now - t < RATE_WINDOW_SHORT)
+    recent_hour = sum(1 for t in timestamps if now - t < RATE_WINDOW_LONG)
     if recent_short >= RATE_LIMIT_SHORT:
-        raise HTTPException(429, f"Rate limit exceeded. Max {RATE_LIMIT_SHORT} requests per {RATE_WINDOW_SHORT // 60} minutes.")
-    if len(timestamps) >= RATE_LIMIT_LONG:
-        raise HTTPException(429, f"Rate limit exceeded. Max {RATE_LIMIT_LONG} requests per hour.")
+        raise HTTPException(429, f"Slow down! Max {RATE_LIMIT_SHORT} messages per {RATE_WINDOW_SHORT // 60} minutes.")
+    if recent_hour >= RATE_LIMIT_LONG:
+        raise HTTPException(429, f"Hourly limit reached. Max {RATE_LIMIT_LONG} messages per hour.")
+    if len(timestamps) >= RATE_LIMIT_DAILY:
+        raise HTTPException(429, f"Daily limit reached. Max {RATE_LIMIT_DAILY} messages per day. Come back tomorrow!")
     _rate_store[ip].append(now)
 
 
@@ -659,7 +664,7 @@ def chat(req: ChatRequest, request: Request, db: Session = Depends(get_db)):
 
     def generate():
         current_messages = list(messages)
-        max_tool_rounds = 5
+        max_tool_rounds = 3
 
         for _ in range(max_tool_rounds):
             # Non-streaming call that may include tool use
