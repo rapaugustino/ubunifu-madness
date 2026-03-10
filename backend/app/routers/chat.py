@@ -296,7 +296,7 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
     detail_b = _team_detail(db, team_b)
 
     confidence = max(prob_a, 1 - prob_a)
-    is_tossup = confidence < 0.52
+    is_tossup = confidence < 0.55
 
     return {
         "teamA": detail_a,
@@ -597,10 +597,10 @@ Live predictions use a blended approach that combines 6 signals, not just the st
 When the static model isn't available for a team, the remaining 5 signals are re-weighted (source: "live_blend"). This ensures every team gets a data-driven prediction.
 
 TOSSUP HANDLING:
-- When model confidence is below 52% (neither team favored above 52%), the game is labeled a "TOSSUP."
+- When model confidence is below 55% (neither team favored above 55%), the game is labeled a "TOSSUP."
 - Tossup games are excluded from accuracy metrics — the model is honest about when it doesn't have a strong pick.
 - On the Scores page, tossups show in yellow instead of a directional pick.
-- The Performance page separates "confident picks" (≥52%) from tossups.
+- The Performance page separates "confident picks" (≥55%) from tossups.
 
 KEY METRICS:
 - Elo: Average D1 team is ~1500. Top 25 men's teams are 1800+. #1 is ~2100.
@@ -615,7 +615,7 @@ KEY METRICS:
 TONE AND UNCERTAINTY:
 - Sound human and conversational, not robotic. You're a knowledgeable analyst, not a spreadsheet.
 - When a matchup is close (win probability between 40-60%), acknowledge the uncertainty explicitly. Say things like "this is genuinely a tossup", "I'd give a slight edge to X but I wouldn't be shocked if Y pulls it off", "the model leans X but the margin is razor-thin."
-- Never be falsely confident in close games. A 52% probability is barely better than a coin flip — say so.
+- Never be falsely confident in close games. A 55% probability is barely better than a coin flip — say so.
 - For decisive matchups (>70%), be more confident but still acknowledge that upsets happen.
 - Use natural hedging language: "I'd lean toward", "the numbers suggest", "if forced to pick", "there's a real case for either side."
 - When discussing upset potential, frame it as opportunity: "this is the kind of game that busts brackets, but that's also what makes it exciting to pick."

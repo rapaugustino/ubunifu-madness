@@ -60,6 +60,18 @@ def live_scores(
             espn_gid = str(game["id"])
             date_str = date or datetime.now().strftime("%Y%m%d")
 
+            # Detect game type from ESPN data
+            game_type = game.get("gameType", "regular")
+            headline = game.get("headline", "")
+            if game_type == "tourney":
+                detected_type = "tourney"
+            elif game_type == "conf_tourney" or "conference" in headline.lower():
+                detected_type = "conf_tourney"
+            else:
+                detected_type = "regular"
+
+            is_conf_tourney = detected_type == "conf_tourney"
+
             # Check for existing locked prediction
             locked = (
                 db.query(GamePrediction)
@@ -69,7 +81,9 @@ def live_scores(
 
             if not locked:
                 # Lock in a prediction for this game (pre-game)
-                prob_away, source = predict_matchup(db, away_kid, home_kid)
+                prob_away, source = predict_matchup(
+                    db, away_kid, home_kid, is_conf_tourney=is_conf_tourney
+                )
                 locked = GamePrediction(
                     espn_game_id=espn_gid,
                     game_date=date_str,
@@ -81,6 +95,7 @@ def live_scores(
                     home_name=game["home"].get("name"),
                     locked_prob_away=prob_away,
                     prediction_source=source,
+                    game_type=detected_type,
                 )
                 db.add(locked)
                 db.flush()

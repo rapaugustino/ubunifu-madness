@@ -27,7 +27,8 @@ class GamePrediction(Base):
     # Locked pre-game prediction (frozen before tipoff, never updated)
     locked_prob_away = Column(Float, nullable=False)  # P(away wins) at lock time
     locked_at = Column(DateTime, server_default=func.now(), nullable=False)
-    prediction_source = Column(String(20), nullable=False)  # "model_v2", "elo_fallback"
+    prediction_source = Column(String(20), nullable=False)  # "ml_ensemble", "blended", "live_blend"
+    game_type = Column(String(20), nullable=True)  # "regular", "conf_tourney", "tourney"
 
     # Outcome (filled after game ends)
     away_score = Column(Integer, nullable=True)

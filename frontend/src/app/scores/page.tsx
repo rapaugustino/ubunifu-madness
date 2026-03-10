@@ -154,7 +154,7 @@ function GameCard({ game }: { game: Game }) {
       {/* Our model's prediction */}
       {game.winProb && (() => {
         const confidence = Math.max(game.winProb.away, game.winProb.home);
-        const isTossup = confidence < 0.52;
+        const isTossup = confidence < 0.55;
         const modelPickedAway = game.winProb.away > game.winProb.home;
         const actualWinnerAway = game.away.score > game.home.score;
         const modelCorrect = isFinal && !isTossup ? (modelPickedAway === actualWinnerAway) : null;
@@ -333,14 +333,14 @@ export default function ScoresPage() {
   const scheduledGames = games.filter((g) => g.status === "STATUS_SCHEDULED");
 
   // Daily model accuracy for final games with predictions (exclude tossups)
-  const gamesWithPredictions = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) >= 0.52);
+  const gamesWithPredictions = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) >= 0.55);
   const modelCorrectCount = gamesWithPredictions.filter((g) => {
     const pickedAway = g.winProb!.away > g.winProb!.home;
     const actualAway = g.away.score > g.home.score;
     return pickedAway === actualAway;
   }).length;
   const totalPredicted = gamesWithPredictions.length;
-  const tossupCount = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) < 0.52).length;
+  const tossupCount = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) < 0.55).length;
 
   return (
     <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">

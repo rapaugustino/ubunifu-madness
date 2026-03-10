@@ -1,0 +1,61 @@
+{
+  "version": "v3",
+  "feature_cols": [
+    "elo_a",
+    "elo_b",
+    "elo_diff",
+    "elo_prob",
+    "seed_a",
+    "seed_b",
+    "seed_diff",
+    "conf_avg_elo_diff",
+    "conf_nc_winrate_diff",
+    "conf_tourney_hist_winrate_diff",
+    "efg_diff",
+    "to_diff",
+    "or_diff",
+    "ftr_diff",
+    "opp_efg_diff",
+    "opp_to_diff",
+    "off_eff_diff",
+    "def_eff_diff",
+    "tempo_diff",
+    "win_pct_diff",
+    "massey_rank_diff",
+    "massey_disagreement_diff",
+    "last_n_winpct_diff",
+    "last_n_mov_diff",
+    "efg_trend_diff",
+    "coach_tenure_diff",
+    "conf_tourney_wins_diff",
+    "sos_diff"
+  ],
+  "weights": {
+    "lr": 0.3776,
+    "lgb": 0.6224
+  },
+  "elo_params": {
+    "k_factor": 19.57596676554135,
+    "home_adv": 90.91773096957667,
+    "season_regression": 0.9499563152314554,
+    "mean_elo": 1500
+  },
+  "training": {
+    "min_season": 2012,
+    "include_conf_tourney": false,
+    "n_training_games": 1705,
+    "n_features": 28
+  },
+  "lgb_params": {
+    "n_estimators": 266,
+    "max_depth": 5,
+    "learning_rate": 0.011127535577352032,
+    "num_leaves": 59,
+    "min_child_weight": 3.5024255415370256,
+    "subsample": 0.886438833144194,
+    "colsample_bytree": 0.7574584244356917,
+    "verbose": -1,
+    "random_state": 42
+  },
+  "cv_brier_calibrated": 0.1543
+}

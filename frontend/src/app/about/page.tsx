@@ -103,9 +103,9 @@ export default function AboutPage() {
         <h2 className="text-xl font-semibold mb-3">Tossup Handling</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            When the blended model&apos;s confidence is below 52% — meaning neither team is
-            favored above 52% — the game is labeled a <strong>TOSSUP</strong>. This is the
-            model being honest: a 51% prediction is barely better than a coin flip, and
+            When the blended model&apos;s confidence is below 55% — meaning neither team is
+            favored above 55% — the game is labeled a <strong>TOSSUP</strong>. This is the
+            model being honest: a 54% prediction is barely better than a coin flip, and
             pretending to have a strong pick would be misleading.
           </p>
           <p>

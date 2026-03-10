@@ -224,7 +224,7 @@ export default function GameDetailPage() {
   /* ── Prediction helpers ── */
   const wp = game.winProb;
   const confidence = wp ? Math.max(wp.away, wp.home) : 0;
-  const isTossup = wp ? confidence < 0.52 : false;
+  const isTossup = wp ? confidence < 0.55 : false;
   const modelPickedAway = wp ? wp.away > wp.home : false;
   const actualWinnerAway = game.away.score > game.home.score;
   const modelCorrect =

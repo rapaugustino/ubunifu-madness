@@ -413,12 +413,21 @@ def _record_probability(db: Session, team_a_id: int, team_b_id: int) -> float | 
 # Prediction (main entry point)
 # ---------------------------------------------------------------------------
 
+CONF_TOURNEY_COMPRESSION = 0.80  # Shrink confidence 20% for conference tourney games
+TOSSUP_THRESHOLD = 0.55  # Games below this confidence are tossups
+
+
 def predict_matchup(
     db: Session,
     team_a_id: int,
     team_b_id: int,
+    is_conf_tourney: bool = False,
 ) -> tuple[float, str]:
     """Predict P(team_a wins) by blending multiple signals.
+
+    Args:
+        is_conf_tourney: If True, compress probability toward 0.5 to account
+            for conference tournament parity (same-conference familiarity).
 
     Returns (probability, source_label).
     """
@@ -448,6 +457,8 @@ def predict_matchup(
                     raw = bundle.calibrator.predict(np.array([[raw]]))[0]
 
                 prob = float(np.clip(raw, 0.02, 0.98))
+                if is_conf_tourney:
+                    prob = 0.5 + (prob - 0.5) * CONF_TOURNEY_COMPRESSION
                 return prob, "ml_ensemble"
         except Exception as e:
             logger.warning(f"ML prediction failed, falling back: {e}")
@@ -505,6 +516,10 @@ def predict_matchup(
     else:
         # Fallback: equal-weight average of all signals
         prob = sum(signals.values()) / len(signals)
+
+    # Conference tournament games: compress toward 0.5 (parity adjustment)
+    if is_conf_tourney:
+        prob = 0.5 + (prob - 0.5) * CONF_TOURNEY_COMPRESSION
 
     prob = max(0.02, min(0.98, prob))
     return prob, source

@@ -412,7 +412,7 @@ function GameLog({ games }: { games: RecentGame[] }) {
               const favAway = g.lockedProbAway > 0.5;
               const favName = favAway ? g.awayName : g.homeName;
               const confidence = Math.max(g.lockedProbAway, 1 - g.lockedProbAway);
-              const isTossup = confidence < 0.52;
+              const isTossup = confidence < 0.55;
               const awayWon = g.awayScore > g.homeScore;
               return (
                 <tr key={g.id} className={`border-b border-card-border/50 hover:bg-white/[0.02] ${isTossup ? "opacity-60" : ""}`}>

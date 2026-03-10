@@ -56,13 +56,31 @@ def performance_summary(
         src_correct = base.filter(GamePrediction.prediction_source == src, GamePrediction.model_correct == True).count()  # noqa: E712
         by_source[src] = {"total": cnt, "correct": src_correct, "accuracy": round(src_correct / cnt, 4) if cnt > 0 else None}
 
-    # Tossup count (confidence < 52%)
-    tossups = sum(1 for gp in resolved if max(gp.locked_prob_away, 1 - gp.locked_prob_away) < 0.52)
+    # Tossup count (confidence < 55% — raised from 52% for more honest uncertainty)
+    tossup_threshold = 0.55
+    tossups = sum(1 for gp in resolved if max(gp.locked_prob_away, 1 - gp.locked_prob_away) < tossup_threshold)
 
     # Accuracy excluding tossups
-    confident_games = [gp for gp in resolved if max(gp.locked_prob_away, 1 - gp.locked_prob_away) >= 0.52]
+    confident_games = [gp for gp in resolved if max(gp.locked_prob_away, 1 - gp.locked_prob_away) >= tossup_threshold]
     confident_correct = sum(1 for gp in confident_games if gp.model_correct)
     confident_total = len(confident_games)
+
+    # Accuracy by game type (conf_tourney vs tourney vs regular)
+    by_game_type = {}
+    game_type_groups = {}
+    for gp in resolved:
+        gt = gp.game_type or "unknown"
+        if gt not in game_type_groups:
+            game_type_groups[gt] = {"total": 0, "correct": 0}
+        game_type_groups[gt]["total"] += 1
+        if gp.model_correct:
+            game_type_groups[gt]["correct"] += 1
+    for gt, counts in game_type_groups.items():
+        by_game_type[gt] = {
+            "total": counts["total"],
+            "correct": counts["correct"],
+            "accuracy": round(counts["correct"] / counts["total"], 4) if counts["total"] > 0 else None,
+        }
 
     return {
         "total": total,
@@ -72,8 +90,10 @@ def performance_summary(
         "confidentCorrect": confident_correct,
         "confidentAccuracy": round(confident_correct / confident_total, 4) if confident_total > 0 else None,
         "tossups": tossups,
+        "tossupThreshold": tossup_threshold,
         "brierScore": round(brier, 4),
         "bySource": by_source,
+        "byGameType": by_game_type,
     }
 
 
