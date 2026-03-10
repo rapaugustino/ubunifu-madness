@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Tv, Clock, Activity, ArrowRight, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Tv, Clock, Activity, ArrowRight, RefreshCw, Check, X, Lock } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -32,6 +33,14 @@ interface Game {
   away: TeamScore;
   home: TeamScore;
   winProb: { away: number; home: number } | null;
+  lockedPrediction: {
+    probAway: number;
+    probHome: number;
+    source: string;
+    lockedAt: string | null;
+    resolved: boolean;
+    correct: boolean | null;
+  } | null;
 }
 
 function formatDate(d: Date): string {
@@ -52,9 +61,11 @@ function displayDate(d: Date): string {
 }
 
 function GameCard({ game }: { game: Game }) {
-  const isLive = game.status === "STATUS_IN_PROGRESS";
+  const router = useRouter();
   const isFinal = game.status === "STATUS_FINAL";
   const isScheduled = game.status === "STATUS_SCHEDULED";
+  const isLive = !isFinal && !isScheduled;
+  const hasTBD = game.away.name === "TBD" || game.home.name === "TBD";
 
   const tipoff = isScheduled
     ? new Date(game.date).toLocaleTimeString("en-US", {
@@ -67,12 +78,13 @@ function GameCard({ game }: { game: Game }) {
   const compareHref = canCompare
     ? `/compare?teamA=${game.away.kaggleId}&teamB=${game.home.kaggleId}`
     : undefined;
+  const detailHref = `/scores/${game.id}`;
 
   const card = (
     <div
-      className={`bg-card border rounded-xl p-4 transition-colors ${
+      className={`bg-card border rounded-xl p-4 transition-colors hover:border-accent/40 cursor-pointer ${
         isLive ? "border-accent/50" : "border-card-border"
-      } ${canCompare ? "hover:border-accent/40 cursor-pointer" : ""}`}
+      }`}
     >
       {/* Status bar */}
       <div className="flex items-center justify-between mb-3 text-xs">
@@ -115,33 +127,85 @@ function GameCard({ game }: { game: Game }) {
         <TeamRow team={game.home} isFinal={isFinal} isWinner={isFinal && game.home.score > game.away.score} />
       </div>
 
-      {/* Our model's prediction */}
-      {game.winProb && (
+      {/* TBD matchup notice */}
+      {!game.winProb && hasTBD && (
         <div className="mt-3 pt-3 border-t border-card-border">
-          <div className="flex items-center justify-between text-xs text-muted mb-1">
-            <span>{game.away.abbreviation} {(game.winProb.away * 100).toFixed(0)}%</span>
-            <span className="text-[10px]">ML MODEL</span>
-            <span>{game.home.abbreviation} {(game.winProb.home * 100).toFixed(0)}%</span>
+          <div className="text-center text-[10px] text-muted">
+            Waiting for matchup — prediction available once both teams are set
           </div>
-          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden flex">
-            <div
-              className="h-full bg-accent/70 rounded-l-full"
-              style={{ width: `${game.winProb.away * 100}%` }}
-            />
-            <div
-              className="h-full bg-white/20 rounded-r-full"
-              style={{ width: `${game.winProb.home * 100}%` }}
-            />
+        </div>
+      )}
+
+      {/* Our model's prediction */}
+      {game.winProb && (() => {
+        const confidence = Math.max(game.winProb.away, game.winProb.home);
+        const isTossup = confidence < 0.52;
+        const modelPickedAway = game.winProb.away > game.winProb.home;
+        const actualWinnerAway = game.away.score > game.home.score;
+        const modelCorrect = isFinal && !isTossup ? (modelPickedAway === actualWinnerAway) : null;
+
+        return (
+          <div className="mt-3 pt-3 border-t border-card-border">
+            <div className="flex items-center justify-between text-xs text-muted mb-1">
+              <span>{game.away.abbreviation} {(game.winProb.away * 100).toFixed(0)}%</span>
+              {isTossup ? (
+                <span className="text-[10px] text-yellow-400/80 font-medium">TOSSUP</span>
+              ) : isFinal && modelCorrect !== null ? (
+                <span className={`flex items-center gap-1 text-[10px] font-medium ${modelCorrect ? "text-green-400" : "text-red-400"}`}>
+                  {modelCorrect ? <Check size={10} /> : <X size={10} />}
+                  {modelCorrect ? "MODEL CORRECT" : "MODEL MISSED"}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[10px]">
+                  <Lock size={8} className="text-muted/50" />
+                  LOCKED PREDICTION
+                </span>
+              )}
+              <span>{game.home.abbreviation} {(game.winProb.home * 100).toFixed(0)}%</span>
+            </div>
+            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden flex">
+              <div
+                className={`h-full rounded-l-full ${isTossup
+                  ? "bg-yellow-500/40"
+                  : isFinal && modelCorrect !== null
+                    ? (modelCorrect ? "bg-green-500/70" : "bg-red-500/50")
+                    : "bg-accent/70"
+                }`}
+                style={{ width: `${game.winProb.away * 100}%` }}
+              />
+              <div
+                className={`h-full rounded-r-full ${isTossup ? "bg-yellow-500/20" : "bg-white/20"}`}
+                style={{ width: `${game.winProb.home * 100}%` }}
+              />
+            </div>
           </div>
+        );
+      })()}
+
+      {/* Secondary compare link */}
+      {compareHref && (
+        <div className="mt-3 pt-3 border-t border-card-border">
+          <Link
+            href={compareHref}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[10px] text-muted hover:text-accent transition-colors flex items-center gap-1"
+          >
+            <ArrowRight size={10} />
+            Compare Teams
+          </Link>
         </div>
       )}
     </div>
   );
 
-  if (compareHref) {
-    return <Link href={compareHref} className="group block">{card}</Link>;
-  }
-  return card;
+  return (
+    <div
+      onClick={() => router.push(detailHref)}
+      className="group block cursor-pointer"
+    >
+      {card}
+    </div>
+  );
 }
 
 function TeamRow({
@@ -224,7 +288,7 @@ export default function ScoresPage() {
 
   // Auto-refresh every 30s if any games are live (background, no loading flash)
   useEffect(() => {
-    const hasLive = games.some((g) => g.status === "STATUS_IN_PROGRESS");
+    const hasLive = games.some((g) => g.status !== "STATUS_FINAL" && g.status !== "STATUS_SCHEDULED");
     if (!hasLive) return;
     const interval = setInterval(() => fetchScores(true), 30000);
     return () => clearInterval(interval);
@@ -249,9 +313,19 @@ export default function ScoresPage() {
     });
   };
 
-  const liveGames = games.filter((g) => g.status === "STATUS_IN_PROGRESS");
+  const liveGames = games.filter((g) => g.status !== "STATUS_FINAL" && g.status !== "STATUS_SCHEDULED");
   const finalGames = games.filter((g) => g.status === "STATUS_FINAL");
   const scheduledGames = games.filter((g) => g.status === "STATUS_SCHEDULED");
+
+  // Daily model accuracy for final games with predictions (exclude tossups)
+  const gamesWithPredictions = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) >= 0.52);
+  const modelCorrectCount = gamesWithPredictions.filter((g) => {
+    const pickedAway = g.winProb!.away > g.winProb!.home;
+    const actualAway = g.away.score > g.home.score;
+    return pickedAway === actualAway;
+  }).length;
+  const totalPredicted = gamesWithPredictions.length;
+  const tossupCount = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) < 0.52).length;
 
   return (
     <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -318,6 +392,38 @@ export default function ScoresPage() {
         <div className="text-center text-muted py-20">No games scheduled for this date.</div>
       ) : (
         <div className="space-y-6">
+          {/* Daily model accuracy */}
+          {totalPredicted > 0 && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-card-border">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted">Model Accuracy:</span>
+                <span className={`font-semibold ${
+                  modelCorrectCount / totalPredicted >= 0.7 ? "text-green-400" :
+                  modelCorrectCount / totalPredicted >= 0.5 ? "text-accent" : "text-red-400"
+                }`}>
+                  {modelCorrectCount}/{totalPredicted} ({(modelCorrectCount / totalPredicted * 100).toFixed(0)}%)
+                </span>
+                {tossupCount > 0 && (
+                  <span className="text-xs text-yellow-400/70">{tossupCount} tossup{tossupCount > 1 ? "s" : ""}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                {gamesWithPredictions.map((g) => {
+                  const pickedAway = g.winProb!.away > g.winProb!.home;
+                  const actualAway = g.away.score > g.home.score;
+                  const correct = pickedAway === actualAway;
+                  return (
+                    <div
+                      key={g.id}
+                      className={`w-2 h-2 rounded-full ${correct ? "bg-green-400" : "bg-red-400"}`}
+                      title={`${g.away.abbreviation} vs ${g.home.abbreviation}: ${correct ? "Correct" : "Missed"}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Live games first */}
           {liveGames.length > 0 && (
             <div>

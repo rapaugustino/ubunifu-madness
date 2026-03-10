@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Nav from "@/components/Nav";
+import Footer from "@/components/Footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ubunifu Madness — AI-Powered March Madness Predictions",
   description:
-    "AI-powered bracket predictions for March Machine Learning Mania 2026. Built with ML models, Elo ratings, and advanced AI analysis.",
+    "March Madness bracket predictions powered by a 31-feature LR + LightGBM ensemble (0.14 Brier score). Live Elo ratings, conference strength metrics, and an AI bracket agent.",
 };
 
 export default function RootLayout({
@@ -30,7 +31,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Nav />
-        <main className="pt-16">{children}</main>
+        <main className="pt-16">
+          {children}
+          <Footer />
+        </main>
       </body>
     </html>
   );

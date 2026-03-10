@@ -1,11 +1,14 @@
 """Live data endpoints powered by ESPN API, enriched with our DB data."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import Team, EloRating, Prediction, TourneySeed, TeamConference, TeamSeasonStats
+from app.models import Team, EloRating, Prediction, TourneySeed, TeamConference, TeamSeasonStats, GamePrediction, GameResult
 from app.services import espn
+from app.services.predictor import predict_matchup
 
 router = APIRouter(tags=["espn"])
 
@@ -48,29 +51,84 @@ def live_scores(
         _enrich_team(game["away"], espn_map, elo_map)
         _enrich_team(game["home"], espn_map, elo_map)
 
-        # Add our model's win probability if both teams are in our DB
         away_kid = game["away"].get("kaggleId")
         home_kid = game["home"].get("kaggleId")
         game["winProb"] = None
+        game["lockedPrediction"] = None
+
         if away_kid and home_kid:
-            lo, hi = min(away_kid, home_kid), max(away_kid, home_kid)
-            pred = (
-                db.query(Prediction)
-                .filter(Prediction.season == SEASON, Prediction.team_a_id == lo, Prediction.team_b_id == hi)
+            espn_gid = str(game["id"])
+            date_str = date or datetime.now().strftime("%Y%m%d")
+
+            # Check for existing locked prediction
+            locked = (
+                db.query(GamePrediction)
+                .filter(GamePrediction.espn_game_id == espn_gid)
                 .first()
             )
-            if pred:
-                # winProb is for the away team
-                prob = pred.win_prob_a if away_kid == lo else (1 - pred.win_prob_a)
-                game["winProb"] = {"away": round(prob, 3), "home": round(1 - prob, 3)}
+
+            if not locked:
+                # Lock in a prediction for this game (pre-game)
+                prob_away, source = predict_matchup(db, away_kid, home_kid)
+                locked = GamePrediction(
+                    espn_game_id=espn_gid,
+                    game_date=date_str,
+                    season=SEASON,
+                    gender=gender,
+                    away_team_id=away_kid,
+                    home_team_id=home_kid,
+                    away_name=game["away"].get("name"),
+                    home_name=game["home"].get("name"),
+                    locked_prob_away=prob_away,
+                    prediction_source=source,
+                )
+                db.add(locked)
+                db.flush()
+
+            # Resolve outcome if game is final and not yet resolved
+            is_final = game["status"] == "STATUS_FINAL"
+            if is_final and locked.model_correct is None:
+                away_score = game["away"].get("score", 0)
+                home_score = game["home"].get("score", 0)
+                if away_score != home_score:  # skip ties (shouldn't happen in basketball)
+                    model_picked_away = locked.locked_prob_away > 0.5
+                    actual_away_won = away_score > home_score
+                    locked.away_score = away_score
+                    locked.home_score = home_score
+                    locked.winner_team_id = away_kid if actual_away_won else home_kid
+                    locked.model_correct = (model_picked_away == actual_away_won)
+                    locked.resolved_at = datetime.utcnow()
+                    db.flush()
+
+            # Return locked prediction to frontend
+            game["winProb"] = {
+                "away": round(locked.locked_prob_away, 3),
+                "home": round(1 - locked.locked_prob_away, 3),
+            }
+            game["lockedPrediction"] = {
+                "probAway": round(locked.locked_prob_away, 3),
+                "probHome": round(1 - locked.locked_prob_away, 3),
+                "source": locked.prediction_source,
+                "lockedAt": locked.locked_at.isoformat() if locked.locked_at else None,
+                "resolved": locked.model_correct is not None,
+                "correct": locked.model_correct,
+            }
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return {"games": games, "date": date, "gender": gender}
 
 
 @router.get("/scores/{game_id}")
-def game_box_score(game_id: str):
+def game_box_score(game_id: str, gender: str = Query("M", pattern="^(M|W)$")):
     """Full box score for a game."""
-    return espn.get_game_summary(game_id)
+    try:
+        return espn.get_game_summary(game_id, gender)
+    except Exception:
+        raise HTTPException(404, f"Game {game_id} not found on ESPN")
 
 
 @router.get("/rankings/ap")
@@ -126,6 +184,59 @@ def team_roster(
     return {"teamId": team_id, "teamName": team.name, **roster}
 
 
+@router.get("/history/{team_a_id}/{team_b_id}")
+def head_to_head_history(
+    team_a_id: int,
+    team_b_id: int,
+    limit: int = Query(5, le=20),
+    db: Session = Depends(get_db),
+):
+    """Head-to-head game history between two teams."""
+    from sqlalchemy import or_, and_
+
+    team_a = db.query(Team).filter(Team.id == team_a_id).first()
+    team_b = db.query(Team).filter(Team.id == team_b_id).first()
+    if not team_a or not team_b:
+        raise HTTPException(404, "One or both teams not found")
+
+    games = (
+        db.query(GameResult)
+        .filter(
+            or_(
+                and_(GameResult.w_team_id == team_a_id, GameResult.l_team_id == team_b_id),
+                and_(GameResult.w_team_id == team_b_id, GameResult.l_team_id == team_a_id),
+            )
+        )
+        .order_by(GameResult.season.desc(), GameResult.day_num.desc())
+        .limit(limit)
+        .all()
+    )
+
+    team_names = {team_a.id: team_a.name, team_b.id: team_b.name}
+
+    meetings = []
+    for g in games:
+        loc_label = {"H": "home", "A": "away", "N": "neutral"}.get(g.w_loc, "unknown")
+        meetings.append({
+            "season": g.season,
+            "dayNum": g.day_num,
+            "winnerName": team_names[g.w_team_id],
+            "loserName": team_names[g.l_team_id],
+            "winnerScore": g.w_score,
+            "loserScore": g.l_score,
+            "winnerLoc": loc_label,
+            "gameType": g.game_type,
+            "numOt": g.num_ot,
+        })
+
+    return {
+        "teamA": {"id": team_a.id, "name": team_a.name},
+        "teamB": {"id": team_b.id, "name": team_b.name},
+        "meetings": meetings,
+        "count": len(meetings),
+    }
+
+
 @router.post("/seeds/refresh")
 def refresh_seeds(
     gender: str = Query("M", pattern="^(M|W)$"),
@@ -165,13 +276,22 @@ def refresh_seeds(
             )
             .first()
         )
+        seed_int = int(seed_num)
+        # Derive region from insertion order (W, X, Y, Z for groups of 16)
+        region = et.get("region", "W")
+        seed_str = f"{region}{seed_int:02d}"
+
         if existing:
-            existing.seed_number = int(seed_num)
+            existing.seed_number = seed_int
+            existing.seed = seed_str
+            existing.region = region
         else:
             db.add(TourneySeed(
                 season=season,
                 team_id=db_team.id,
-                seed_number=int(seed_num),
+                seed=seed_str,
+                seed_number=seed_int,
+                region=region,
             ))
         inserted += 1
 

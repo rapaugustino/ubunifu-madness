@@ -6,7 +6,6 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-haiku-4-5-20251001"
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
-    DATA_DIR: str = "../data/raw"
 
     class Config:
         env_file = ".env"

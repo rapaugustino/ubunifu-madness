@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import teams, predictions, rankings, compare, bracket, chat, espn
+from app.routers import teams, predictions, rankings, compare, bracket, chat, espn, performance, players
 
 
 @asynccontextmanager
@@ -34,6 +34,8 @@ app.include_router(compare.router, prefix="/api")
 app.include_router(bracket.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(espn.router, prefix="/api")
+app.include_router(performance.router, prefix="/api")
+app.include_router(players.router, prefix="/api")
 
 
 @app.get("/health")

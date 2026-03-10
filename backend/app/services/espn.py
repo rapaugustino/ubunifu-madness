@@ -95,9 +95,10 @@ def get_scoreboard(date: str | None = None, gender: str = "M") -> list[dict]:
     return games
 
 
-def get_game_summary(game_id: str) -> dict:
+def get_game_summary(game_id: str, gender: str = "M") -> dict:
     """Get box score for a specific game."""
-    url = f"{ESPN_BASE}/mens-college-basketball/summary?event={game_id}"
+    sport = SPORTS.get(gender, SPORTS["M"])
+    url = f"{ESPN_BASE}/{sport}/summary?event={game_id}"
     data = _fetch(url, ttl=60)
 
     result = {
@@ -128,6 +129,7 @@ def get_game_summary(game_id: str) -> dict:
                 stat_values = athlete.get("stats", [])
                 player_stats = dict(zip(labels, stat_values))
                 result["players"].append({
+                    "espnId": int(player["id"]) if player.get("id") else None,
                     "team": team.get("abbreviation", ""),
                     "name": player.get("displayName", ""),
                     "position": player.get("position", {}).get("abbreviation", ""),
@@ -299,7 +301,7 @@ def get_all_team_records(gender: str = "M") -> list[dict]:
     """
     sport = SPORTS.get(gender, SPORTS["M"])
     # Standings endpoint gives us all teams grouped by conference
-    url = f"{ESPN_WEB_BASE}/{sport}/standings?season=2025&group=50"
+    url = f"{ESPN_WEB_BASE}/{sport}/standings?season=2026&group=50"
     try:
         data = _fetch(url, ttl=3600)
     except Exception:

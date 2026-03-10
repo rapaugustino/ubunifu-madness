@@ -53,6 +53,7 @@ def _load_team_detail(db: Session, team_id: int, season: int):
             "ftRate": stats.avg_ft_rate,
             "oppEfgPct": stats.avg_opp_efg_pct,
             "oppToPct": stats.avg_opp_to_pct,
+            "sos": stats.sos,
             "masseyRank": stats.massey_avg_rank,
             "momentum": {
                 "lastNWinPct": stats.last_n_winpct,
@@ -138,6 +139,7 @@ def compare_teams(
         ("Rebound Rate", "orPct", "%", False),
         ("Free Throw Rate", "ftRate", "%", False),
         ("Opp eFG%", "oppEfgPct", "%", True),
+        ("Strength of Schedule", "sos", "Elo", False),
     ]
     for label, key, unit, lower_better in comparisons:
         val_a = stats_a.get(key)

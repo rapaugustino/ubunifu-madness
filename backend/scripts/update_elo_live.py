@@ -216,19 +216,40 @@ def update_elo_from_espn(session: Session, date_str: str, gender: str) -> dict:
 
 
 def refresh_conference_strength(session: Session, gender: str):
-    """Recompute conference strength metrics from current Elo ratings."""
+    """Recompute conference strength metrics from current Elo ratings and game results."""
     import numpy as np
 
     elo_map = _load_current_elo(session)
 
-    # Load team → conference mapping
+    # Load team → conference mapping (use Team.gender, not ID heuristic)
+    team_gender_map = {
+        t.id: t.gender
+        for t in session.query(Team).filter(Team.gender == gender).all()
+    }
     tc_rows = session.query(TeamConference).filter(TeamConference.season == SEASON).all()
+    team_to_conf: dict[int, str] = {}
     conf_teams: dict[str, list[int]] = {}
     for tc in tc_rows:
-        g = "M" if tc.team_id < 2000 else "W"
-        if g != gender:
+        if tc.team_id not in team_gender_map:
             continue
+        team_to_conf[tc.team_id] = tc.conf_abbrev
         conf_teams.setdefault(tc.conf_abbrev, []).append(tc.team_id)
+
+    # Compute non-conference win rate from game results
+    nc_wins: dict[str, int] = {}
+    nc_total: dict[str, int] = {}
+    games = session.query(GameResult).filter(
+        GameResult.season == SEASON,
+        GameResult.gender == gender,
+        GameResult.game_type == "regular",
+    ).all()
+    for g in games:
+        w_conf = team_to_conf.get(g.w_team_id)
+        l_conf = team_to_conf.get(g.l_team_id)
+        if w_conf and l_conf and w_conf != l_conf:
+            nc_wins[w_conf] = nc_wins.get(w_conf, 0) + 1
+            nc_total[w_conf] = nc_total.get(w_conf, 0) + 1
+            nc_total[l_conf] = nc_total.get(l_conf, 0) + 1
 
     updated = 0
     for conf, team_ids in conf_teams.items():
@@ -239,6 +260,7 @@ def refresh_conference_strength(session: Session, gender: str):
         avg_elo = float(np.mean(elos))
         elo_depth = float(np.std(elos)) if len(elos) > 1 else 0.0
         top5_elo = float(np.mean(sorted(elos, reverse=True)[:5]))
+        nc_winrate = nc_wins.get(conf, 0) / max(nc_total.get(conf, 0), 1)
 
         cs = session.query(ConferenceStrength).filter(
             ConferenceStrength.season == SEASON,
@@ -249,6 +271,7 @@ def refresh_conference_strength(session: Session, gender: str):
             cs.avg_elo = round(avg_elo, 2)
             cs.elo_depth = round(elo_depth, 2)
             cs.top5_elo = round(top5_elo, 2)
+            cs.nc_winrate = round(nc_winrate, 4)
             updated += 1
 
     session.commit()

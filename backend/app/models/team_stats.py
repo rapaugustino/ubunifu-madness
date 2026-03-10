@@ -27,6 +27,9 @@ class TeamSeasonStats(Base):
     avg_def_eff = Column(Float, nullable=True)
     avg_tempo = Column(Float, nullable=True)
 
+    # Strength of schedule (average opponent Elo)
+    sos = Column(Float, nullable=True)
+
     # Massey ordinals
     massey_avg_rank = Column(Float, nullable=True)
     massey_disagreement = Column(Float, nullable=True)

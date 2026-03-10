@@ -7,9 +7,17 @@ import {
   Brain,
   Target,
   TrendingUp,
+  Radio,
 } from "lucide-react";
 
 const features = [
+  {
+    icon: Radio,
+    title: "Live Scores & Predictions",
+    description:
+      "Real-time ESPN scores with blended win probabilities locked before tipoff. Track model accuracy as games finish.",
+    href: "/scores",
+  },
   {
     icon: Trophy,
     title: "Interactive Bracket",
@@ -21,30 +29,37 @@ const features = [
     icon: BarChart3,
     title: "Power Rankings",
     description:
-      "Elo-based power rankings with conference strength, momentum trends, and historical performance metrics.",
+      "Elo-based power rankings for 700+ teams with conference strength, strength of schedule, and daily ESPN updates.",
     href: "/dashboard",
   },
   {
     icon: GitCompareArrows,
-    title: "Head-to-Head",
+    title: "Head-to-Head Compare",
     description:
-      "Compare any two teams side-by-side. See feature breakdowns, conference context, and where the model sees edges.",
+      "Compare any two teams side-by-side with stat breakdowns, conference context, recent meetings, and AI analysis.",
     href: "/compare",
   },
   {
     icon: MessageSquare,
-    title: "Bracket Chat Agent",
+    title: "Madness Agent",
     description:
-      'Ask the AI anything: "Best Cinderella pick?", "Who wins the East?", "Build me an upset bracket."',
+      "AI bracket advisor with 6 tools — look up any team, get blended predictions, check live scores, find upset picks.",
     href: "/chat",
+  },
+  {
+    icon: Target,
+    title: "Performance Tracking",
+    description:
+      "Full transparency: cumulative accuracy charts, daily breakdowns, calibration curves, and a game-by-game log.",
+    href: "/performance",
   },
 ];
 
 const stats = [
-  { label: "Brier Score", value: "0.1413", subtext: "43.5% better than baseline" },
-  { label: "Features", value: "31", subtext: "Elo, conf, box scores, Massey" },
+  { label: "Prediction Signals", value: "6", subtext: "Elo, model, momentum, conf, SOS, efficiency" },
+  { label: "Brier Score", value: "0.1413", subtext: "43.5% better than seed baseline" },
   { label: "Training Games", value: "4,302", subtext: "Men's + Women's tournaments" },
-  { label: "Predictions", value: "132K+", subtext: "Every possible 2026 matchup" },
+  { label: "Model Features", value: "31", subtext: "Elo, conf, box scores, Massey" },
 ];
 
 export default function Home() {
@@ -65,9 +80,10 @@ export default function Home() {
             </h1>
 
             <p className="text-xl text-muted mb-8 max-w-2xl mx-auto">
-              AI-powered March Madness predictions. Where machine learning meets
-              bracketology — Elo ratings, conference strength analysis, and
-              AI-powered insights for every matchup.
+              Six prediction signals blended in real time — Elo, ML model, momentum,
+              conference strength, schedule difficulty, and efficiency. Predictions
+              locked before tipoff, accuracy tracked transparently. An AI agent
+              that breaks down any matchup on demand.
             </p>
 
             <div className="flex items-center justify-center gap-4">
@@ -119,11 +135,11 @@ export default function Home() {
             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-4">
               <Brain className="text-blue-400" size={20} />
             </div>
-            <h3 className="font-semibold text-lg mb-2">1. ML Model Predicts</h3>
+            <h3 className="font-semibold text-lg mb-2">1. Six Signals Blend</h3>
             <p className="text-sm text-muted">
-              Elo ratings, conference strength, box scores, Massey ordinals, and
-              27 more features feed a calibrated LR + LightGBM ensemble trained
-              on 4,302 tournament games.
+              Elo ratings, a 31-feature ML ensemble, momentum, conference strength,
+              SOS-adjusted records, and efficiency combine into a single win
+              probability — updated daily from ESPN.
             </p>
           </div>
 
@@ -156,7 +172,7 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-20">
         <h2 className="text-3xl font-bold text-center mb-12">Features</h2>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature) => {
             const Icon = feature.icon;
             return (
@@ -182,29 +198,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-card-border py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <div className="w-6 h-6 rounded bg-accent flex items-center justify-center text-xs font-bold text-white">
-              UM
-            </div>
-            Ubunifu Madness &copy; 2026
-          </div>
-          <div className="text-xs text-muted">
-            Data:{" "}
-            <a
-              href="https://www.kaggle.com/competitions/march-machine-learning-mania-2026/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent/70 hover:text-accent transition-colors"
-            >
-              Kaggle March ML Mania 2026
-            </a>
-            {" "}(CC BY 4.0) &middot; Live scores: ESPN
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

@@ -73,6 +73,7 @@ const featureTooltipMap: Record<string, string> = {
   "Rebound Rate": METRIC_TOOLTIPS.orPct,
   "Free Throw Rate": METRIC_TOOLTIPS.ftRate,
   "Opp eFG%": METRIC_TOOLTIPS.oppEfgPct,
+  "Strength of Schedule": METRIC_TOOLTIPS.sos,
 };
 
 export default function ComparePage() {
@@ -89,6 +90,10 @@ function CompareContent() {
   const [teamAId, setTeamAId] = useState<number | null>(null);
   const [teamBId, setTeamBId] = useState<number | null>(null);
   const [comparison, setComparison] = useState<CompareResult | null>(null);
+  const [history, setHistory] = useState<{ meetings: Array<{
+    season: number; dayNum: number; winnerName: string; loserName: string;
+    winnerScore: number; loserScore: number; winnerLoc: string; gameType: string; numOt: number;
+  }>; count: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [gender, setGender] = useState<"M" | "W" | "all">("M");
   const [analysisText, setAnalysisText] = useState("");
@@ -125,14 +130,22 @@ function CompareContent() {
       .catch(() => setTeams([]));
   }, [gender]);
 
-  // Fetch comparison when teams change
+  // Fetch comparison and history when teams change
   useEffect(() => {
     if (!teamAId || !teamBId || teamAId === teamBId) return;
     setLoading(true);
     setAnalysisText("");
-    fetch(`${API_URL}/api/compare/${teamAId}/${teamBId}`)
-      .then((r) => r.json())
-      .then((data) => setComparison(data))
+    setHistory(null);
+
+    // Fetch comparison and history in parallel
+    Promise.all([
+      fetch(`${API_URL}/api/compare/${teamAId}/${teamBId}`).then((r) => r.json()),
+      fetch(`${API_URL}/api/history/${teamAId}/${teamBId}?limit=5`).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([compareData, histData]) => {
+        setComparison(compareData);
+        setHistory(histData);
+      })
       .catch(() => setComparison(null))
       .finally(() => setLoading(false));
   }, [teamAId, teamBId]);
@@ -203,7 +216,7 @@ function CompareContent() {
       </div>
 
       {/* Team selectors */}
-      <div className="grid grid-cols-[1fr,auto,1fr] gap-4 items-start mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-4 items-start mb-8">
         <div>
           <label className="text-xs text-muted uppercase tracking-wider block mb-2">Team A</label>
           <select
@@ -219,7 +232,7 @@ function CompareContent() {
           </select>
         </div>
 
-        <div className="pt-8">
+        <div className="pt-0 sm:pt-8 flex justify-center">
           <div className="w-10 h-10 rounded-full bg-card border border-card-border flex items-center justify-center">
             <ArrowLeftRight size={16} className="text-muted" />
           </div>
@@ -392,6 +405,48 @@ function CompareContent() {
               })}
             </div>
           </div>
+
+          {/* Head-to-head history */}
+          {history && history.meetings.length > 0 && (
+            <div className="mt-6 p-6 rounded-xl bg-card border border-card-border">
+              <h3 className="text-sm font-medium text-muted uppercase tracking-wider mb-4">
+                Recent Meetings ({history.count})
+              </h3>
+              <div className="space-y-2">
+                {history.meetings.map((m, idx) => {
+                  const isTeamAWinner = m.winnerName === comparison.teamA.name;
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/[0.02] border border-white/[0.04]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted font-mono w-12">{m.season}</span>
+                        <span className={`text-sm font-medium ${isTeamAWinner ? "text-accent" : "text-blue-400"}`}>
+                          {m.winnerName}
+                        </span>
+                        <span className="text-xs text-muted">def.</span>
+                        <span className="text-sm text-muted">{m.loserName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-mono font-semibold">
+                          {m.winnerScore}-{m.loserScore}
+                        </span>
+                        {m.numOt > 0 && (
+                          <span className="text-[10px] text-yellow-400/70">
+                            {m.numOt}OT
+                          </span>
+                        )}
+                        <span className="text-[10px] text-muted capitalize w-14 text-right">
+                          {m.gameType === "tourney" ? "NCAA" : m.winnerLoc}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

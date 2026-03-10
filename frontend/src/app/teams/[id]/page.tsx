@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ArrowLeft, Sparkles, TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -17,6 +17,33 @@ interface Player {
   weight: string;
   experience: string;
   headshot: string | null;
+}
+
+interface EnrichedPlayer {
+  id: number;
+  espnId: number;
+  name: string;
+  jersey: string | null;
+  position: string | null;
+  positionFull: string | null;
+  height: string | null;
+  weight: string | null;
+  experience: string | null;
+  headshot: string | null;
+  injuryStatus: string | null;
+  injuryDetail: string | null;
+  stats: {
+    gamesPlayed: number;
+    ppg: number;
+    rpg: number;
+    apg: number;
+    mpg: number;
+    fgPct: number | null;
+    fg3Pct: number | null;
+    ftPct: number | null;
+    importanceScore: number | null;
+    minutesShare: number | null;
+  } | null;
 }
 
 interface Coach {
@@ -115,6 +142,7 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
   const { id } = use(params);
   const [team, setTeam] = useState<TeamDetail | null>(null);
   const [roster, setRoster] = useState<Roster | null>(null);
+  const [enrichedPlayers, setEnrichedPlayers] = useState<EnrichedPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -131,6 +159,11 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
       .then((r) => r.json())
       .then((data) => setRoster(data))
       .catch(() => setRoster(null));
+    // Fetch enriched player stats (if available)
+    fetch(`${API_URL}/api/players/${id}`)
+      .then((r) => r.json())
+      .then((data) => setEnrichedPlayers(data.players || []))
+      .catch(() => setEnrichedPlayers([]));
   }, [id]);
 
   const generateReport = () => {
@@ -342,47 +375,121 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
           )}
         </div>
 
-        {/* Roster */}
-        {roster && roster.players.length > 0 && (
+        {/* Roster with Stats */}
+        {(enrichedPlayers.length > 0 || (roster && roster.players.length > 0)) && (
           <div className="md:col-span-2 p-6 rounded-xl bg-card border border-card-border">
             <h2 className="text-sm font-medium text-muted uppercase tracking-wider mb-4">
-              Roster ({roster.players.length} players)
+              Roster ({enrichedPlayers.length || roster?.players.length || 0} players)
             </h2>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-card-border">
-                    <th className="text-left py-2 pr-3 text-xs text-muted font-medium">#</th>
-                    <th className="text-left py-2 pr-3 text-xs text-muted font-medium">Player</th>
-                    <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden sm:table-cell">Pos</th>
-                    <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden md:table-cell">Height</th>
-                    <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden md:table-cell">Weight</th>
-                    <th className="text-left py-2 text-xs text-muted font-medium hidden lg:table-cell">Class</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.players.map((p) => (
-                    <tr key={p.id || p.name} className="border-b border-card-border/30 hover:bg-white/[0.02]">
-                      <td className="py-2 pr-3 font-mono text-muted">{p.jersey || "—"}</td>
-                      <td className="py-2 pr-3">
-                        <div className="flex items-center gap-2">
-                          {p.headshot ? (
-                            <img src={p.headshot} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-white/5 shrink-0" />
-                          )}
-                          <span className="font-medium">{p.name}</span>
-                          <span className="text-xs text-muted sm:hidden">{p.position}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-3 text-muted hidden sm:table-cell">{p.positionFull || p.position}</td>
-                      <td className="py-2 pr-3 font-mono text-muted hidden md:table-cell">{p.height || "—"}</td>
-                      <td className="py-2 pr-3 font-mono text-muted hidden md:table-cell">{p.weight || "—"}</td>
-                      <td className="py-2 text-muted hidden lg:table-cell">{p.experience || "—"}</td>
+              {enrichedPlayers.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-card-border">
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium">#</th>
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium">Player</th>
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden sm:table-cell">Pos</th>
+                      <th className="text-right py-2 pr-3 text-xs text-muted font-medium">PPG</th>
+                      <th className="text-right py-2 pr-3 text-xs text-muted font-medium hidden sm:table-cell">RPG</th>
+                      <th className="text-right py-2 pr-3 text-xs text-muted font-medium hidden sm:table-cell">APG</th>
+                      <th className="text-right py-2 pr-3 text-xs text-muted font-medium hidden md:table-cell">MPG</th>
+                      <th className="text-right py-2 pr-3 text-xs text-muted font-medium hidden md:table-cell">FG%</th>
+                      <th className="text-right py-2 text-xs text-muted font-medium hidden lg:table-cell">Impact</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {enrichedPlayers
+                      .sort((a, b) => (b.stats?.ppg || 0) - (a.stats?.ppg || 0))
+                      .map((p) => {
+                        const isKey = p.stats?.importanceScore && p.stats.importanceScore > 0.15;
+                        return (
+                          <tr key={p.id} className="border-b border-card-border/30 hover:bg-white/[0.02]">
+                            <td className="py-2 pr-3 font-mono text-muted">{p.jersey || "—"}</td>
+                            <td className="py-2 pr-3">
+                              <div className="flex items-center gap-2">
+                                {p.headshot ? (
+                                  <img src={p.headshot} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-white/5 shrink-0" />
+                                )}
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`font-medium ${isKey ? "" : ""}`}>{p.name}</span>
+                                    {isKey && <span className="text-[9px] bg-accent/20 text-accent px-1 rounded">KEY</span>}
+                                    {p.injuryStatus && (
+                                      <span className="flex items-center gap-0.5 text-[9px] bg-red-500/20 text-red-400 px-1 rounded">
+                                        <AlertTriangle size={8} />
+                                        {p.injuryStatus}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-muted">{p.experience}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2 pr-3 text-muted hidden sm:table-cell">{p.position || "—"}</td>
+                            <td className="py-2 pr-3 text-right font-mono">{p.stats?.ppg?.toFixed(1) || "—"}</td>
+                            <td className="py-2 pr-3 text-right font-mono text-muted hidden sm:table-cell">{p.stats?.rpg?.toFixed(1) || "—"}</td>
+                            <td className="py-2 pr-3 text-right font-mono text-muted hidden sm:table-cell">{p.stats?.apg?.toFixed(1) || "—"}</td>
+                            <td className="py-2 pr-3 text-right font-mono text-muted hidden md:table-cell">{p.stats?.mpg?.toFixed(1) || "—"}</td>
+                            <td className="py-2 pr-3 text-right font-mono text-muted hidden md:table-cell">
+                              {p.stats?.fgPct != null ? (p.stats.fgPct * 100).toFixed(1) + "%" : "—"}
+                            </td>
+                            <td className="py-2 text-right hidden lg:table-cell">
+                              {p.stats?.importanceScore != null ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <div className="w-12 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${isKey ? "bg-accent" : "bg-white/20"}`}
+                                      style={{ width: `${Math.min(p.stats.importanceScore * 400, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-muted font-mono w-8">
+                                    {(p.stats.importanceScore * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-card-border">
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium">#</th>
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium">Player</th>
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden sm:table-cell">Pos</th>
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden md:table-cell">Height</th>
+                      <th className="text-left py-2 pr-3 text-xs text-muted font-medium hidden md:table-cell">Weight</th>
+                      <th className="text-left py-2 text-xs text-muted font-medium hidden lg:table-cell">Class</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roster?.players.map((p) => (
+                      <tr key={p.id || p.name} className="border-b border-card-border/30 hover:bg-white/[0.02]">
+                        <td className="py-2 pr-3 font-mono text-muted">{p.jersey || "—"}</td>
+                        <td className="py-2 pr-3">
+                          <div className="flex items-center gap-2">
+                            {p.headshot ? (
+                              <img src={p.headshot} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-white/5 shrink-0" />
+                            )}
+                            <span className="font-medium">{p.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3 text-muted hidden sm:table-cell">{p.positionFull || p.position}</td>
+                        <td className="py-2 pr-3 font-mono text-muted hidden md:table-cell">{p.height || "—"}</td>
+                        <td className="py-2 pr-3 font-mono text-muted hidden md:table-cell">{p.weight || "—"}</td>
+                        <td className="py-2 text-muted hidden lg:table-cell">{p.experience || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}

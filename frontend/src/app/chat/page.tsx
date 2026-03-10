@@ -31,10 +31,10 @@ function renderMarkdown(text: string) {
 }
 
 const suggestedQuestions = [
-  { icon: Trophy, text: "Who wins the East region?" },
+  { icon: Trophy, text: "Compare Duke and Houston — who has the edge?" },
   { icon: TrendingUp, text: "Best Cinderella pick this year?" },
-  { icon: AlertTriangle, text: "Which 12-seed is most likely to upset?" },
-  { icon: Sparkles, text: "Build me a bracket that maximizes upsets" },
+  { icon: AlertTriangle, text: "What makes the SEC the strongest conference?" },
+  { icon: Sparkles, text: "How does the prediction model work?" },
 ];
 
 export default function ChatPage() {
@@ -42,7 +42,7 @@ export default function ChatPage() {
     {
       role: "assistant",
       content:
-        "Hey! I'm the Madness Agent — your bracket advisor powered by our prediction model built for the Kaggle March Machine Learning Mania competition. I have access to Elo ratings, conference strength data, box score stats, and win probabilities for every possible NCAA matchup.\n\nAsk me anything — who should you pick in a specific region, which upsets to target, how two teams match up, or let me build you a bracket. What's on your mind?",
+        "Hey! I'm the Madness Agent — your bracket advisor powered by our prediction model. I can look up any D1 team's stats, compare head-to-head matchups with win probabilities, analyze conferences, check live scores, and find upset candidates.\n\nI can also explain how the app works — Elo ratings, the prediction model, strength of schedule, anything.\n\nWhat would you like to know?",
     },
   ]);
   const [input, setInput] = useState("");

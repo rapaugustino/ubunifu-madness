@@ -287,20 +287,24 @@ See [docs/RETRAINING.md](docs/RETRAINING.md) for the full pipeline walkthrough.
 ## Key Features
 
 - **Power Rankings** — Custom Elo-based rankings for 700+ teams (men's and women's), updated daily from ESPN results
-- **Live Scores** — Real-time ESPN scoreboard with Elo enrichment and model win probabilities, auto-refreshing every 30s
+- **Live Scores** — Real-time ESPN scoreboard with Elo enrichment and blended win probabilities, locked before tipoff with post-game accuracy tracking
+- **Blended Predictions** — 6-signal prediction system: Static Model (30%), Elo (30%), Momentum (15%), Conference Strength (10%), SOS-Adjusted Record (10%), Efficiency (5%)
 - **Tournament Bracket** — Full bracket visualization with model-predicted advancement probabilities via Monte Carlo simulation
 - **Team Comparison** — Side-by-side statistical breakdown (Four Factors, efficiency, momentum, coaching) with head-to-head win probability
-- **Madness Agent** — AI-powered chat assistant (Claude) with full access to team data, Elo ratings, and predictions for bracket analysis
-- **Automated Elo Updates** — Daily cron job fetches ESPN game results and updates Elo ratings, conference strength, and team records
+- **Madness Agent** — AI-powered chat assistant (Claude) with 6 tools: team lookup, blended matchup predictions, conference analysis, rankings, live scores, upset finder
+- **Performance Tracking** — Cumulative accuracy charts, daily breakdowns, calibration curves, and paginated game log. Predictions locked before tipoff, never changed retroactively.
+- **Tossup Handling** — Games with <52% model confidence labeled as TOSSUP, excluded from accuracy metrics
+- **Automated Daily Pipeline** — Cron job updates Elo ratings, game results, team records, player stats, strength of schedule, and conference strength
 
 ## Model Performance
 
 | Metric | Value |
 |--------|-------|
 | Brier Score (calibrated) | **0.1607** |
-| Ensemble | LR (76%) + LightGBM (24%) |
-| Features | 27 across 7 categories |
+| Static Ensemble | LR (76%) + LightGBM (24%) |
+| Features | 31 across 8 categories |
 | Calibration | Isotonic regression |
 | CV Strategy | Leave-one-season-out (2015-2025) |
+| Live Prediction | Blended 6-signal (Elo + Model + Momentum + Conference + SOS + Efficiency) |
 
 See [docs/MODEL.md](docs/MODEL.md) for the full breakdown.

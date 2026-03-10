@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal
 from app.models import (
-    EloRating, ConferenceStrength, TeamSeasonStats,
+    Team, EloRating, ConferenceStrength, TeamSeasonStats,
     TeamConference, TourneySeed,
 )
 
@@ -141,13 +141,14 @@ def compute_conference_strength(session, elo_by_season, all_results):
     """Compute conference strength metrics."""
     print("Computing conference strength...")
 
-    # Load team conferences
+    # Load team conferences (use Team.gender from DB, not ID heuristic)
+    team_gender_map = {t.id: t.gender for t in session.query(Team).all()}
     tc_rows = session.query(TeamConference).all()
     team_conf = {}  # (season, team_id) -> conf_abbrev
     conf_teams = defaultdict(list)  # (season, gender, conf) -> [team_ids]
     for tc in tc_rows:
         team_conf[(tc.season, tc.team_id)] = tc.conf_abbrev
-        gender = "M" if tc.team_id < 2000 else "W"
+        gender = team_gender_map.get(tc.team_id, "M")
         conf_teams[(tc.season, gender, tc.conf_abbrev)].append(tc.team_id)
 
     # Precompute non-conf game lookups by season
@@ -244,49 +245,50 @@ def compute_team_season_stats(session, elo_by_season):
     compact_df = pd.concat(compact_dfs, ignore_index=True)
     compact_season = compact_df[compact_df["Season"] == TARGET_SEASON]
 
-    # Load Massey ordinals
-    massey_path = DATA_DIR / "MMasseyOrdinals.csv"
+    # Load Massey ordinals (men's and women's if available)
     massey_lookup = {}
-    if massey_path.exists():
-        print("  Loading Massey ordinals...")
-        massey = pd.read_csv(massey_path)
-        top_systems = ["POM", "SAG", "MOR", "WOL", "DOL", "RPI", "AP", "USA",
-                       "COL", "RTH", "WLK", "ARG", "KPK", "BIH", "LOG"]
-        massey = massey[
-            (massey["Season"] == TARGET_SEASON)
-            & (massey["RankingDayNum"] == 133)
-            & (massey["SystemName"].isin(top_systems))
-        ]
-        for tid, grp in massey.groupby("TeamID"):
-            massey_lookup[int(tid)] = {
-                "avg_rank": grp["OrdinalRank"].mean(),
-                "disagreement": grp["OrdinalRank"].std(),
-            }
-        print(f"  Massey: {len(massey_lookup)} teams")
-
-    # Load coaches
-    coaches_path = DATA_DIR / "MTeamCoaches.csv"
-    coach_lookup = {}
-    if coaches_path.exists():
-        coaches_df = pd.read_csv(coaches_path)
-        # For target season, get last coach per team
-        season_coaches = coaches_df[coaches_df["Season"] == TARGET_SEASON]
-        for tid, grp in season_coaches.groupby("TeamID"):
-            last = grp.iloc[-1]
-            cname = last["CoachName"]
-
-            # Tenure
-            all_same = coaches_df[
-                (coaches_df["TeamID"] == tid)
-                & (coaches_df["CoachName"] == cname)
-                & (coaches_df["Season"] <= TARGET_SEASON)
+    top_systems = ["POM", "SAG", "MOR", "WOL", "DOL", "RPI", "AP", "USA",
+                   "COL", "RTH", "WLK", "ARG", "KPK", "BIH", "LOG"]
+    for massey_file in ["MMasseyOrdinals.csv", "WMasseyOrdinals.csv"]:
+        massey_path = DATA_DIR / massey_file
+        if massey_path.exists():
+            print(f"  Loading {massey_file}...")
+            massey = pd.read_csv(massey_path)
+            massey = massey[
+                (massey["Season"] == TARGET_SEASON)
+                & (massey["RankingDayNum"] == 133)
+                & (massey["SystemName"].isin(top_systems))
             ]
-            tenure = len(all_same["Season"].unique())
+            for tid, grp in massey.groupby("TeamID"):
+                massey_lookup[int(tid)] = {
+                    "avg_rank": grp["OrdinalRank"].mean(),
+                    "disagreement": grp["OrdinalRank"].std(),
+                }
+    print(f"  Massey: {len(massey_lookup)} teams")
 
-            coach_lookup[int(tid)] = {
-                "name": cname,
-                "tenure": tenure,
-            }
+    # Load coaches (men's and women's if available)
+    coach_lookup = {}
+    for coaches_file in ["MTeamCoaches.csv", "WTeamCoaches.csv"]:
+        coaches_path = DATA_DIR / coaches_file
+        if coaches_path.exists():
+            print(f"  Loading {coaches_file}...")
+            coaches_df = pd.read_csv(coaches_path)
+            season_coaches = coaches_df[coaches_df["Season"] == TARGET_SEASON]
+            for tid, grp in season_coaches.groupby("TeamID"):
+                last = grp.iloc[-1]
+                cname = last["CoachName"]
+
+                all_same = coaches_df[
+                    (coaches_df["TeamID"] == tid)
+                    & (coaches_df["CoachName"] == cname)
+                    & (coaches_df["Season"] <= TARGET_SEASON)
+                ]
+                tenure = len(all_same["Season"].unique())
+
+                coach_lookup[int(tid)] = {
+                    "name": cname,
+                    "tenure": tenure,
+                }
 
     # Conference tourney wins
     conf_tourney_wins = defaultdict(int)
@@ -362,6 +364,22 @@ def compute_team_season_stats(session, elo_by_season):
                     "tempo": np.mean(tempo_list),
                 }
 
+    # Precompute strength of schedule (average opponent Elo)
+    sos_map = {}
+    current_elo = {tid: e for (s, tid), e in elo_by_season.items() if s == TARGET_SEASON}
+    for tid in team_ids:
+        opp_elos = []
+        w_games = compact_season[compact_season["WTeamID"] == tid]
+        l_games = compact_season[compact_season["LTeamID"] == tid]
+        for _, g in w_games.iterrows():
+            opp_id = int(g["LTeamID"])
+            opp_elos.append(current_elo.get(opp_id, MEAN_ELO))
+        for _, g in l_games.iterrows():
+            opp_id = int(g["WTeamID"])
+            opp_elos.append(current_elo.get(opp_id, MEAN_ELO))
+        if opp_elos:
+            sos_map[tid] = np.mean(opp_elos)
+
     # Precompute momentum (last 10 games) for all teams
     momentum = {}
     for tid in team_ids:
@@ -413,6 +431,7 @@ def compute_team_season_stats(session, elo_by_season):
             avg_off_eff=r(bs.get("off_eff")),
             avg_def_eff=r(bs.get("def_eff")),
             avg_tempo=r(bs.get("tempo"), 1),
+            sos=r(sos_map.get(tid), 1),
             massey_avg_rank=r(ms.get("avg_rank"), 1),
             massey_disagreement=r(ms.get("disagreement"), 1),
             last_n_winpct=r(mo.get("winpct"), 3),

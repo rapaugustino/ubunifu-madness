@@ -7,6 +7,8 @@ from app.models.elo_rating import EloRating
 from app.models.conference_strength import ConferenceStrength
 from app.models.team_stats import TeamSeasonStats
 from app.models.model_artifact import ModelArtifact
+from app.models.game_prediction import GamePrediction
+from app.models.player import Player, PlayerSeasonStats, PlayerGameLog
 
 __all__ = [
     "Team",
@@ -19,4 +21,8 @@ __all__ = [
     "ConferenceStrength",
     "TeamSeasonStats",
     "ModelArtifact",
+    "GamePrediction",
+    "Player",
+    "PlayerSeasonStats",
+    "PlayerGameLog",
 ]

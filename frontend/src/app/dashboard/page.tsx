@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { TrendingUp, TrendingDown, Minus, Search, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { TrendingUp, TrendingDown, Minus, Search, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -37,6 +37,7 @@ interface ConferenceRanking {
   ncWinRate: number;
   teams: number;
   tourneyBids: number;
+  top5Elo: number;
 }
 
 export default function DashboardPage() {
@@ -48,13 +49,15 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"teams" | "conferences">("teams");
   const [gender, setGender] = useState<"M" | "W">("M");
+  const [page, setPage] = useState(1);
+  const perPage = 50;
 
   const fetchRankings = useCallback(async (background = false) => {
     if (!background) setLoading(true);
     else setRefreshing(true);
     try {
       const [rankData, confData] = await Promise.all([
-        fetch(`${API_URL}/api/rankings/power?gender=${gender}&limit=100`).then((r) => r.json()),
+        fetch(`${API_URL}/api/rankings/power?gender=${gender}&limit=500`).then((r) => r.json()),
         fetch(`${API_URL}/api/rankings/conferences?gender=${gender}`).then((r) => r.json()),
       ]);
       setRankings(rankData.rankings || []);
@@ -86,11 +89,20 @@ export default function DashboardPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [fetchRankings, lastUpdated]);
 
-  const filteredRankings = rankings.filter(
-    (r) =>
-      r.team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.conference.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredRankings = useMemo(() =>
+    rankings.filter(
+      (r) =>
+        r.team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.conference.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [rankings, searchQuery]
   );
+
+  const totalPages = Math.ceil(filteredRankings.length / perPage);
+  const paginatedRankings = filteredRankings.slice((page - 1) * perPage, page * perPage);
+
+  // Reset to page 1 when search or gender changes
+  useEffect(() => { setPage(1); }, [searchQuery, gender]);
 
   return (
     <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -167,7 +179,7 @@ export default function DashboardPage() {
       {loading ? (
         <div className="text-center text-muted py-20">Loading rankings...</div>
       ) : activeTab === "teams" ? (
-        <div className="rounded-xl border border-card-border overflow-hidden">
+        <div className="rounded-xl border border-card-border overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-card border-b border-card-border">
@@ -179,7 +191,7 @@ export default function DashboardPage() {
                 </th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden md:table-cell">Record</th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden lg:table-cell">
-                  <MetricLabel label="Conf Strength" tooltip={METRIC_TOOLTIPS.confAvgElo} className="justify-end" />
+                  <MetricLabel label="NC Win %" tooltip={METRIC_TOOLTIPS.confNcWinRate} className="justify-end" />
                 </th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">
                   <MetricLabel label="Trend" tooltip={METRIC_TOOLTIPS.trend} className="justify-end" />
@@ -187,7 +199,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredRankings.map((ranking) => (
+              {paginatedRankings.map((ranking) => (
                 <tr
                   key={ranking.team.id}
                   className="border-b border-card-border/50 hover:bg-white/[0.02] transition-colors"
@@ -260,9 +272,47 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-card border-t border-card-border">
+              <span className="text-xs text-muted">
+                {filteredRankings.length} teams &middot; Page {page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-1.5 rounded-md hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-8 h-8 rounded-md text-xs font-medium transition-colors ${
+                      p === page
+                        ? "bg-accent text-white"
+                        : "text-muted hover:text-foreground hover:bg-white/5"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-1.5 rounded-md hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="rounded-xl border border-card-border overflow-hidden">
+        <div className="rounded-xl border border-card-border overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-card border-b border-card-border">
@@ -272,53 +322,64 @@ export default function DashboardPage() {
                   <MetricLabel label="Avg Elo" tooltip={METRIC_TOOLTIPS.confAvgElo} className="justify-end" />
                 </th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden sm:table-cell">
-                  <MetricLabel label="NC Win Rate" tooltip={METRIC_TOOLTIPS.ncWinrate} className="justify-end" />
+                  <MetricLabel label="NC Win %" tooltip={METRIC_TOOLTIPS.confNcWinRate} className="justify-end" />
                 </th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden md:table-cell">Teams</th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Tourney Bids</th>
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden lg:table-cell">
-                  <MetricLabel label="Depth" tooltip={METRIC_TOOLTIPS.confDepth} className="justify-end" />
+                  <MetricLabel label="Top 5 Elo" tooltip={METRIC_TOOLTIPS.confTop5Elo} className="justify-end" />
+                </th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden lg:table-cell">
+                  <MetricLabel label="Parity" tooltip={METRIC_TOOLTIPS.confDepth} className="justify-end" />
                 </th>
               </tr>
             </thead>
             <tbody>
-              {conferences.map((conf) => (
-                <tr key={conf.abbrev} className="border-b border-card-border/50 hover:bg-white/[0.02] transition-colors">
-                  <td className="px-4 py-3">
-                    <span className="text-sm font-mono text-muted">{conf.rank}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-sm">{conf.name}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-sm font-mono font-semibold">{conf.avgElo}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden sm:table-cell">
-                    <span className="text-sm font-mono text-accent">
-                      {(conf.ncWinRate * 100).toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden md:table-cell">
-                    <span className="text-sm text-muted">{conf.teams}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-sm font-semibold">{conf.tourneyBids}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden lg:table-cell">
-                    <div className="flex items-center justify-end gap-2">
-                      <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full"
-                          style={{ width: `${conf.depth * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-muted font-mono">
-                        {(conf.depth * 100).toFixed(0)}
+              {conferences.map((conf) => {
+                // Invert depth (std dev) to parity: lower spread = more parity
+                // Normalize: 100 std dev = high parity, 250 std dev = low parity
+                const parity = Math.max(0, Math.min(1, (250 - conf.depth) / 150));
+                return (
+                  <tr key={conf.abbrev} className="border-b border-card-border/50 hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-mono text-muted">{conf.rank}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-sm">{conf.name}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-sm font-mono font-semibold">{conf.avgElo}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden sm:table-cell">
+                      <span className="text-sm font-mono text-accent">
+                        {(conf.ncWinRate * 100).toFixed(1)}%
                       </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3 text-right hidden md:table-cell">
+                      <span className="text-sm text-muted">{conf.teams}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-sm font-semibold">{conf.tourneyBids}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden lg:table-cell">
+                      <span className="text-sm font-mono font-semibold">{conf.top5Elo}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden lg:table-cell">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-500 rounded-full"
+                            style={{ width: `${parity * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted font-mono">
+                          {(parity * 100).toFixed(0)}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

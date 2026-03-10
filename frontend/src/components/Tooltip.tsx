@@ -97,7 +97,9 @@ export const METRIC_TOOLTIPS: Record<string, string> = {
   winProb: "Win probability from our ML model (LightGBM + Logistic Regression ensemble).",
   seed: "NCAA tournament seed. #1 is strongest, #16 is weakest in each region.",
   confAvgElo: "Average Elo of all teams in the conference. Higher means stronger conference.",
-  confDepth: "Spread of Elo ratings in the conference. Higher means more competitive depth.",
+  confNcWinRate: "Conference's win rate against other conferences this season. The best measure of overall conference strength.",
+  confDepth: "How evenly matched teams are within the conference. Higher means more parity — no weak links.",
+  confTop5Elo: "Average Elo of the top 5 teams. Measures elite talent at the top of the conference.",
   ncWinrate: "Conference's win rate in non-conference games. Shows overall conference strength.",
   tourneyWinRate: "Conference's historical tournament win rate across all March Madness games.",
   trend: "Compares last 10 games win% vs season average. >5% difference triggers hot/cold indicator.",
@@ -105,4 +107,5 @@ export const METRIC_TOOLTIPS: Record<string, string> = {
   momentum: "Recent form based on last 10 games — win percentage and margin of victory.",
   lastNMov: "Average margin of victory/loss in the last 10 games.",
   brier: "Brier score measures prediction accuracy. 0 is perfect, 0.25 is random. Lower is better.",
+  sos: "Strength of schedule — average Elo of all opponents faced. Higher means tougher schedule.",
 };
