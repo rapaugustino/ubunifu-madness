@@ -31,6 +31,18 @@ router = APIRouter(tags=["chat"])
 
 SEASON = 2026
 
+# Common user abbreviations → Kaggle DB conference abbreviations
+_CONF_ALIAS_MAP = {
+    "B10": "big_ten", "BIG10": "big_ten", "BIG 10": "big_ten", "BIG TEN": "big_ten",
+    "B12": "big_twelve", "BIG12": "big_twelve", "BIG 12": "big_twelve", "BIG TWELVE": "big_twelve",
+    "BE": "big_east", "BIG EAST": "big_east",
+    "PAC12": "pac_twelve", "PAC-12": "pac_twelve", "PAC 12": "pac_twelve",
+    "A10": "a_ten", "A-10": "a_ten", "ATLANTIC 10": "a_ten",
+    "ASUN": "a_sun", "A-SUN": "a_sun", "ATLANTIC SUN": "a_sun",
+    "MOUNTAIN WEST": "mwc", "SUN BELT": "sun_belt", "SUNBELT": "sun_belt",
+    "BIG SKY": "big_sky", "BIG SOUTH": "big_south", "BIG WEST": "big_west",
+}
+
 # --- Rate limiting ---
 RATE_WINDOW_SHORT = 600   # 10 minutes
 RATE_LIMIT_SHORT = 20
@@ -296,12 +308,13 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
 
 
 def _exec_get_conference(db: Session, gender: str, input_data: dict) -> dict:
-    conf_input = input_data["conference"].strip().upper()
+    conf_input = input_data["conference"].strip()
+    resolved = _CONF_ALIAS_MAP.get(conf_input.upper(), conf_input.lower())
 
-    # Try direct abbrev match
+    # Try direct abbrev match (case-insensitive)
     cs = db.query(ConferenceStrength).filter(
         ConferenceStrength.season == SEASON, ConferenceStrength.gender == gender,
-        ConferenceStrength.conf_abbrev == conf_input,
+        func.lower(ConferenceStrength.conf_abbrev) == resolved.lower(),
     ).first()
 
     # Try fuzzy match on conference description
@@ -314,7 +327,7 @@ def _exec_get_conference(db: Session, gender: str, input_data: dict) -> dict:
             ).first()
 
     if not cs:
-        return {"error": f"Conference not found: '{input_data['conference']}'. Try abbreviations like SEC, B10, B12, ACC, BE."}
+        return {"error": f"Conference not found: '{input_data['conference']}'. Try: ACC, SEC, big_ten, big_twelve, big_east, mwc, aac."}
 
     # Get teams in this conference
     tc_rows = db.query(TeamConference).filter(
@@ -372,10 +385,11 @@ def _exec_get_top_teams(db: Session, gender: str, input_data: dict) -> dict:
     )
 
     if conf_filter:
-        conf_filter = conf_filter.strip().upper()
+        conf_filter = _CONF_ALIAS_MAP.get(conf_filter.strip().upper(), conf_filter.strip().lower())
         conf_team_ids = [
             tc.team_id for tc in db.query(TeamConference).filter(
-                TeamConference.season == SEASON, TeamConference.conf_abbrev == conf_filter
+                TeamConference.season == SEASON,
+                func.lower(TeamConference.conf_abbrev) == conf_filter.lower(),
             ).all()
         ]
         if conf_team_ids:

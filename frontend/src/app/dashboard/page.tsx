@@ -146,7 +146,7 @@ export default function DashboardPage() {
               placeholder="Search teams..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 bg-card border border-card-border rounded-lg text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50 w-48"
+              className="pl-9 pr-4 py-2 bg-card border border-card-border rounded-lg text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50 w-full sm:w-48"
             />
           </div>
         </div>

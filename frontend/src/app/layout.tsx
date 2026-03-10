@@ -54,6 +54,27 @@ export const metadata: Metadata = {
   ],
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "Ubunifu Madness",
+  url: SITE_URL,
+  description:
+    "AI-powered March Madness bracket predictions using a 6-signal blended model with live Elo ratings, ML ensemble, and an AI bracket agent.",
+  applicationCategory: "SportsApplication",
+  operatingSystem: "Any",
+  author: {
+    "@type": "Person",
+    name: "Richard Pallangyo",
+    url: "https://linkedin.com/in/rapaugustino",
+  },
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  },
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -61,6 +82,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

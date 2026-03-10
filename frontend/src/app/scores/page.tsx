@@ -375,7 +375,7 @@ export default function ScoresPage() {
         >
           <ChevronLeft size={16} />
         </button>
-        <span className="text-sm font-medium min-w-[240px] text-center">
+        <span className="text-sm font-medium min-w-[180px] sm:min-w-[240px] text-center">
           {displayDate(date)}
         </span>
         <button

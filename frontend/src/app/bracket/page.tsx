@@ -612,7 +612,7 @@ export default function BracketPage() {
           )}
         </div>
       ) : currentRegion ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {currentRegion.rounds.map((round, roundIdx) => (
             <div key={roundIdx}>
               <h3 className="text-xs font-medium text-muted mb-3 uppercase tracking-wider">
@@ -636,7 +636,7 @@ export default function BracketPage() {
 
           {/* Region winner */}
           {currentRegion.winner && (
-            <div className="lg:col-span-4 mt-2">
+            <div className="sm:col-span-2 lg:col-span-4 mt-2">
               <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/5 border border-accent/10">
                 <Trophy size={14} className="text-accent" />
                 <span className="text-sm font-medium">
