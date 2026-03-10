@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.database import SessionLocal
 from app.models import (
     Team, EloRating, ConferenceStrength, TeamSeasonStats,
-    TeamConference, TourneySeed,
+    TeamConference,
 )
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "raw"
@@ -171,7 +171,6 @@ def compute_conference_strength(session, elo_by_season, all_results):
             (regular["Season"] == season) & (regular["Gender"] == gender)
         ]
         nc_wins, nc_total = 0, 0
-        team_set = set(team_ids)
         for _, g in season_games.iterrows():
             w_conf = team_conf.get((season, int(g["WTeamID"])))
             l_conf = team_conf.get((season, int(g["LTeamID"])))

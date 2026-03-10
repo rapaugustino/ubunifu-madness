@@ -8,11 +8,8 @@ Responsibilities:
 """
 
 import logging
-import re
-from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.models import Team, Player, PlayerSeasonStats, PlayerGameLog
 from app.services import espn
@@ -271,22 +268,22 @@ def recompute_season_stats(db: Session, team_id: int | None = None, gender: str 
             continue
 
         gp = len(logs)
-        mins = sum(l.minutes for l in logs)
-        pts = sum(l.points for l in logs)
-        fgm = sum(l.fgm for l in logs)
-        fga = sum(l.fga for l in logs)
-        fgm3 = sum(l.fgm3 for l in logs)
-        fga3 = sum(l.fga3 for l in logs)
-        ftm = sum(l.ftm for l in logs)
-        fta = sum(l.fta for l in logs)
-        oreb = sum(l.oreb for l in logs)
-        dreb = sum(l.dreb for l in logs)
-        reb = sum(l.reb for l in logs)
-        ast = sum(l.ast for l in logs)
-        to_total = sum(l.to for l in logs)
-        stl = sum(l.stl for l in logs)
-        blk = sum(l.blk for l in logs)
-        pf = sum(l.pf for l in logs)
+        mins = sum(log.minutes for log in logs)
+        pts = sum(log.points for log in logs)
+        fgm = sum(log.fgm for log in logs)
+        fga = sum(log.fga for log in logs)
+        fgm3 = sum(log.fgm3 for log in logs)
+        fga3 = sum(log.fga3 for log in logs)
+        ftm = sum(log.ftm for log in logs)
+        fta = sum(log.fta for log in logs)
+        oreb = sum(log.oreb for log in logs)
+        dreb = sum(log.dreb for log in logs)
+        reb = sum(log.reb for log in logs)
+        ast = sum(log.ast for log in logs)
+        to_total = sum(log.to for log in logs)
+        stl = sum(log.stl for log in logs)
+        blk = sum(log.blk for log in logs)
+        pf = sum(log.pf for log in logs)
 
         # Upsert season stats
         ss = (

@@ -40,16 +40,37 @@ def _fetch(url: str, ttl: int = 30) -> Any:
 
 
 def get_scoreboard(date: str | None = None, gender: str = "M") -> list[dict]:
-    """Get today's games. date format: YYYYMMDD."""
-    sport = SPORTS.get(gender, SPORTS["M"])
-    url = f"{ESPN_BASE}/{sport}/scoreboard?groups=50&limit=100"
-    if date:
-        url += f"&dates={date}"
+    """Get today's games. date format: YYYYMMDD.
 
-    data = _fetch(url, ttl=30)
+    Fetches both regular-season (groups=50) and conference tournament
+    (no group filter) games, deduplicating by event ID.
+    """
+    sport = SPORTS.get(gender, SPORTS["M"])
+
+    # Fetch regular-season D1 games
+    url_regular = f"{ESPN_BASE}/{sport}/scoreboard?groups=50&limit=100"
+    if date:
+        url_regular += f"&dates={date}"
+    data_regular = _fetch(url_regular, ttl=30)
+
+    # Fetch conf tournament / postseason games (no group filter)
+    url_all = f"{ESPN_BASE}/{sport}/scoreboard?limit=200"
+    if date:
+        url_all += f"&dates={date}"
+    data_all = _fetch(url_all, ttl=30)
+
+    # Merge and deduplicate by event ID
+    seen_ids: set[str] = set()
+    all_events = []
+    for event in data_regular.get("events", []) + data_all.get("events", []):
+        eid = event["id"]
+        if eid not in seen_ids:
+            seen_ids.add(eid)
+            all_events.append(event)
+
     games = []
 
-    for event in data.get("events", []):
+    for event in all_events:
         comp = event["competitions"][0]
         status = comp["status"]["type"]
 
@@ -79,6 +100,17 @@ def get_scoreboard(date: str | None = None, gender: str = "M") -> list[dict]:
         broadcasts = comp.get("broadcasts", [])
         tv = broadcasts[0]["names"][0] if broadcasts and broadcasts[0].get("names") else None
 
+        # Detect game type: regular, conf_tourney, or tourney (NCAA)
+        notes = comp.get("notes", [])
+        headline = notes[0].get("headline", "") if notes else ""
+        tournament_id = comp.get("tournamentId")
+        if "NCAA" in headline or "March Madness" in headline:
+            game_type = "tourney"
+        elif tournament_id or "Tournament" in headline:
+            game_type = "conf_tourney"
+        else:
+            game_type = "regular"
+
         games.append({
             "id": event["id"],
             "date": event["date"],
@@ -90,6 +122,8 @@ def get_scoreboard(date: str | None = None, gender: str = "M") -> list[dict]:
             "broadcast": tv,
             "away": away,
             "home": home,
+            "gameType": game_type,
+            "headline": headline or None,
         })
 
     return games
@@ -349,11 +383,9 @@ def get_tournament_teams(gender: str = "M") -> list[dict]:
             espn_id = int(t["id"])
             if espn_id in teams:
                 continue
-            rank = c.get("curatedRank", {}).get("current")
             # Check for tournament seed in notes
             seed = None
             for note in comp.get("notes", []):
-                text = note.get("headline", "")
                 # e.g., "East Region - 1st Round" or seed in bracket
                 pass
 

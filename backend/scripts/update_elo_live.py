@@ -157,7 +157,7 @@ def update_elo_from_espn(session: Session, date_str: str, gender: str) -> dict:
             l_score=l_score,
             w_loc=w_loc,
             num_ot=0,
-            game_type="regular",
+            game_type=game.get("gameType", "regular"),
             gender=gender,
         ))
 
@@ -308,9 +308,9 @@ def main():
 
             for ch in result["changes"]:
                 w = ch["winner"]
-                l = ch["loser"]
+                loser = ch["loser"]
                 print(f"  {ch['game']}: {w['name']} {w['elo_before']:.1f}→{w['elo_after']:.1f} (+{ch['update']}), "
-                      f"{l['name']} {l['elo_before']:.1f}→{l['elo_after']:.1f} (-{ch['update']})")
+                      f"{loser['name']} {loser['elo_before']:.1f}→{loser['elo_after']:.1f} (-{ch['update']})")
 
             total_processed += result["games_processed"]
 

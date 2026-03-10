@@ -88,11 +88,6 @@ def main():
                 batch = staging_df.iloc[i:i + batch_size]
                 values_parts = []
                 for _, row in batch.iterrows():
-                    vals = ", ".join(
-                        str(int(row[c])) if pd.notna(row[c]) else "NULL"
-                        for c in staging_cols
-                        if c not in ("game_type", "gender")
-                    )
                     values_parts.append(
                         f"({row['season']}, {row['day_num']}, {row['w_team_id']}, {row['l_team_id']}, "
                         f"'{game_type}', '{gender}', "

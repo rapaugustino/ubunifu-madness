@@ -12,10 +12,10 @@ Pipeline:
 5. Prediction locking for upcoming games (via scores endpoint on next access)
 
 Run from backend/:
-    python -m scripts.cron_elo_update
+    python3 -m scripts.cron_elo_update
 
 Cron example (6 AM daily):
-    0 6 * * * cd /path/to/backend && python -m scripts.cron_elo_update >> /var/log/daily_update.log 2>&1
+    0 6 * * * cd /path/to/backend && python3 -m scripts.cron_elo_update >> /var/log/daily_update.log 2>&1
 """
 
 import sys
@@ -31,10 +31,44 @@ from app.services.player_sync import (
     recompute_season_stats,
     compute_importance_scores,
 )
-from app.models import PlayerSeasonStats, GameResult, EloRating, TeamSeasonStats
+from app.models import PlayerSeasonStats, GameResult, EloRating, TeamSeasonStats, Team
+from app.services import espn
 
 
 SEASON = 2026
+
+
+def reconcile_records(session, gender: str) -> int:
+    """Sync win/loss records from ESPN for teams that have an espn_id.
+
+    This catches conference tournament games or any games that the
+    game-by-game Elo pipeline might have missed.
+    """
+    import time as _time
+
+    teams = (
+        session.query(Team, TeamSeasonStats)
+        .join(TeamSeasonStats, (TeamSeasonStats.team_id == Team.id) & (TeamSeasonStats.season == SEASON))
+        .filter(Team.gender == gender, Team.espn_id.isnot(None))
+        .all()
+    )
+
+    corrected = 0
+    for team, stats in teams:
+        rec = espn.get_team_record(team.espn_id, gender)
+        if not rec:
+            continue
+        espn_w, espn_l = rec["wins"], rec["losses"]
+        if espn_w != stats.wins or espn_l != stats.losses:
+            stats.wins = espn_w
+            stats.losses = espn_l
+            total = espn_w + espn_l
+            stats.win_pct = round(espn_w / total, 4) if total > 0 else 0
+            corrected += 1
+        _time.sleep(0.05)  # be polite to ESPN API
+
+    session.flush()
+    return corrected
 
 
 def refresh_sos(session, gender: str) -> int:
@@ -49,13 +83,13 @@ def refresh_sos(session, gender: str) -> int:
 
     opponents: dict[int, list[float]] = {}
     for g in games:
-        w, l = g.w_team_id, g.l_team_id
-        if w not in opponents:
-            opponents[w] = []
-        if l not in opponents:
-            opponents[l] = []
-        opponents[w].append(elo_map.get(l, 1500.0))
-        opponents[l].append(elo_map.get(w, 1500.0))
+        w_id, l_id = g.w_team_id, g.l_team_id
+        if w_id not in opponents:
+            opponents[w_id] = []
+        if l_id not in opponents:
+            opponents[l_id] = []
+        opponents[w_id].append(elo_map.get(l_id, 1500.0))
+        opponents[l_id].append(elo_map.get(w_id, 1500.0))
 
     updated = 0
     for tid, opp_elos in opponents.items():
@@ -94,9 +128,9 @@ def run():
                     print(f"\n[{gender_label}] {date_str}: {result['games_processed']} games processed")
                     for ch in result["changes"]:
                         w = ch["winner"]
-                        l = ch["loser"]
+                        loser = ch["loser"]
                         print(f"  {ch['game']}: {w['name']} {w['elo_before']:.1f}→{w['elo_after']:.1f}, "
-                              f"{l['name']} {l['elo_before']:.1f}→{l['elo_after']:.1f}")
+                              f"{loser['name']} {loser['elo_before']:.1f}→{loser['elo_after']:.1f}")
 
             if total_processed > 0:
                 conf_updated = refresh_conference_strength(session, gender)
@@ -146,6 +180,16 @@ def run():
             except Exception as e:
                 session.rollback()
                 print(f"[{gender_label}] SOS error: {e}")
+
+            # --- Stage 5: Reconcile records from ESPN ---
+            try:
+                rec_count = reconcile_records(session, gender)
+                session.commit()
+                if rec_count > 0:
+                    print(f"[{gender_label}] Reconciled records for {rec_count} teams")
+            except Exception as e:
+                session.rollback()
+                print(f"[{gender_label}] Record reconciliation error: {e}")
 
         print("\n=== Done ===")
     except Exception as e:

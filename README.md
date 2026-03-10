@@ -82,7 +82,7 @@ erDiagram
         int l_score
         string w_loc "H/A/N"
         int num_ot
-        string game_type "regular/tourney"
+        string game_type "regular/conf_tourney/tourney"
         string gender
     }
 
@@ -112,6 +112,7 @@ erDiagram
         int wins
         int losses
         float win_pct
+        float sos "avg opponent Elo"
         float avg_efg_pct
         float avg_to_pct
         float avg_or_pct
@@ -121,6 +122,44 @@ erDiagram
         float avg_tempo
         float massey_avg_rank
         string coach_name
+    }
+
+    GamePrediction {
+        int id PK
+        int espn_game_id UK
+        string gender
+        float prob_away
+        float prob_home
+        string source "blended/live_blend"
+        datetime locked_at
+        boolean resolved
+        boolean correct
+    }
+
+    Player {
+        int id PK
+        int espn_id UK
+        int team_id FK
+        string name
+        string position
+        int jersey
+        string gender
+    }
+
+    PlayerSeasonStats {
+        int id PK
+        int season
+        int player_id FK
+        int games_played
+        float ppg
+        float rpg
+        float apg
+        float spg
+        float bpg
+        float fgp
+        float tpp
+        float ftp
+        float mpg
     }
 
     Conference {
@@ -153,6 +192,8 @@ erDiagram
     Team ||--o{ TeamConference : belongs_to
     Team ||--o{ Prediction : "team_a or team_b"
     Team ||--o{ GameResult : "winner or loser"
+    Team ||--o{ Player : has
+    Player ||--o{ PlayerSeasonStats : has
     Conference ||--o{ TeamConference : contains
     Conference ||--o{ ConferenceStrength : measured_by
 ```
@@ -178,24 +219,41 @@ ubunifu-madness/
 │   │   ├── main.py                 # FastAPI app entry point
 │   │   ├── config.py               # Environment settings
 │   │   ├── database.py             # SQLAlchemy engine & session
-│   │   ├── models/                 # 9 ORM models
-│   │   ├── routers/                # 7 API routers (~30 endpoints)
+│   │   ├── models/                 # 11 ORM models
+│   │   │   ├── team.py             # Team with ESPN mapping
+│   │   │   ├── elo_rating.py       # Elo snapshots per season/day
+│   │   │   ├── game_result.py      # Historical + live game results
+│   │   │   ├── prediction.py       # Static model predictions
+│   │   │   ├── game_prediction.py  # Locked live predictions per game
+│   │   │   ├── team_stats.py       # TeamSeasonStats (record, SOS, Four Factors)
+│   │   │   ├── conference.py       # Conference + TeamConference
+│   │   │   ├── conference_strength.py
+│   │   │   ├── tournament.py       # TourneySeed
+│   │   │   ├── player.py           # Player + PlayerSeasonStats
+│   │   │   └── model_artifact.py   # Stored model metadata
+│   │   ├── routers/                # 9 API routers
 │   │   │   ├── teams.py            # Team search & details
 │   │   │   ├── rankings.py         # Power & conference rankings
 │   │   │   ├── predictions.py      # Head-to-head predictions
 │   │   │   ├── compare.py          # Team comparison with stats
 │   │   │   ├── bracket.py          # Tournament bracket & simulation
 │   │   │   ├── chat.py             # AI Madness Agent (SSE streaming)
-│   │   │   └── espn.py             # Live ESPN data + admin endpoints
-│   │   ├── services/
-│   │   │   └── espn.py             # ESPN API client with TTL cache
-│   │   └── genai/                  # Claude AI prompt engineering
+│   │   │   ├── espn.py             # Live ESPN data + admin endpoints
+│   │   │   ├── players.py          # Player search & stats
+│   │   │   └── performance.py      # Model accuracy tracking
+│   │   └── services/
+│   │       ├── espn.py             # ESPN API client with TTL cache
+│   │       ├── predictor.py        # Blended 6-signal predictor
+│   │       └── player_sync.py      # ESPN → DB player/stat sync
 │   ├── scripts/
 │   │   ├── compute_stats.py        # Elo + conference strength + team stats
 │   │   ├── update_elo_live.py      # Live Elo updates from ESPN results
 │   │   ├── cron_elo_update.py      # Daily cron wrapper (M+W)
-│   │   ├── load_predictions.py     # Load predictions CSV into DB
-│   │   └── espn_team_mapper.py     # Map Kaggle ↔ ESPN team IDs
+│   │   ├── import_predictions.py   # Load predictions CSV into DB
+│   │   ├── map_espn_ids.py         # Map Kaggle ↔ ESPN team IDs
+│   │   ├── seed_db.py              # Initial database seeding from CSVs
+│   │   ├── update_detailed_stats.py # Refresh Four Factors from Kaggle
+│   │   └── backfill_espn_games.py  # Backfill missing ESPN game results
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -203,23 +261,22 @@ ubunifu-madness/
 │   │   │   ├── page.tsx            # Home
 │   │   │   ├── dashboard/          # Power & conference rankings
 │   │   │   ├── scores/             # Live ESPN scores with auto-refresh
-│   │   │   ├── bracket/            # Tournament bracket viewer
+│   │   │   ├── scores/[gameId]/    # Game detail with box score
+│   │   │   ├── teams/              # Team directory
+│   │   │   ├── teams/[id]/         # Team detail page
 │   │   │   ├── compare/            # Head-to-head team comparison
+│   │   │   ├── bracket/            # Tournament bracket viewer
 │   │   │   ├── chat/               # AI Madness Agent
-│   │   │   └── team/[id]/          # Team detail page
-│   │   ├── components/             # Shared UI components
-│   │   └── lib/                    # Types & utilities
+│   │   │   ├── performance/        # Model accuracy tracking
+│   │   │   ├── about/              # Methodology documentation
+│   │   │   └── terms/              # Terms & disclaimers
+│   │   └── components/             # Shared UI components
 │   └── package.json
 ├── notebooks/
 │   └── Ubunifu_Madness_March_ML_Mania.ipynb
-├── data/
-│   ├── raw/                        # Kaggle CSVs (not in git)
-│   └── espn_team_map.json          # ESPN ↔ Kaggle ID mapping
-└── docs/
-    ├── MODEL.md                    # ML pipeline deep-dive
-    ├── RETRAINING.md               # Step-by-step retraining guide
-    ├── API.md                      # Full API reference
-    └── ROADMAP.md                  # Enhancement ideas
+└── data/
+    ├── raw/                        # Kaggle CSVs (not in git)
+    └── espn_team_map.json          # ESPN ↔ Kaggle ID mapping
 ```
 
 ## Quick Start
@@ -271,18 +328,10 @@ The app is now available at `http://localhost:3000`.
 ### Data Pipeline (First-Time Setup)
 
 1. Download Kaggle data: [March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025/data) — place CSVs in `data/raw/`
-2. Compute stats: `cd backend && python3 -m scripts.compute_stats`
-3. Map ESPN teams: `python3 -m scripts.espn_team_mapper`
-4. Load predictions: `python3 -m scripts.load_predictions ../submissions/stage2_submission_v2.csv`
-
-See [docs/RETRAINING.md](docs/RETRAINING.md) for the full pipeline walkthrough.
-
-## Documentation
-
-- **[Model Documentation](docs/MODEL.md)** — ML pipeline, feature engineering, model selection, calibration
-- **[Retraining Guide](docs/RETRAINING.md)** — Step-by-step instructions for retraining with new data
-- **[API Reference](docs/API.md)** — All backend endpoints with parameters and response shapes
-- **[Roadmap](docs/ROADMAP.md)** — Enhancement ideas and future work
+2. Seed database: `cd backend && python3 -m scripts.seed_db`
+3. Compute stats: `python3 -m scripts.compute_stats`
+4. Map ESPN teams: `python3 -m scripts.map_espn_ids`
+5. Load predictions: `python3 -m scripts.import_predictions ../submissions/stage2_submission_v2.csv`
 
 ## Key Features
 
@@ -300,7 +349,7 @@ See [docs/RETRAINING.md](docs/RETRAINING.md) for the full pipeline walkthrough.
 
 | Metric | Value |
 |--------|-------|
-| Brier Score (calibrated) | **0.1607** |
+| Brier Score (calibrated) | **0.1413** |
 | Static Ensemble | LR (76%) + LightGBM (24%) |
 | Features | 31 across 8 categories |
 | Calibration | Isotonic regression |

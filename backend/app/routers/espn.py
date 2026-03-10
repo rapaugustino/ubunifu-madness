@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import Team, EloRating, Prediction, TourneySeed, TeamConference, TeamSeasonStats, GamePrediction, GameResult
+from app.models import Team, EloRating, TourneySeed, TeamSeasonStats, GamePrediction, GameResult
 from app.services import espn
 from app.services.predictor import predict_matchup
 

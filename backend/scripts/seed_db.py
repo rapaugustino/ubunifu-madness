@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import text
 
 # Add parent to path so app imports work
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -96,7 +95,9 @@ def seed_team_conferences(session):
     print(f"  {count} team-conference records loaded")
 
 
-def seed_tourney_seeds(session):
+def seed_tourney_seeds(session, season_filter: int | None = None):
+    """Load tourney seeds. If season_filter is set, only load that season
+    (useful for adding new bracket without re-seeding everything)."""
     print("Loading tourney seeds...")
     count = 0
     for csv_file in ["MNCAATourneySeeds.csv", "WNCAATourneySeeds.csv"]:
@@ -104,18 +105,26 @@ def seed_tourney_seeds(session):
         if not path.exists():
             continue
         df = pd.read_csv(path)
+        if season_filter:
+            df = df[df["Season"] == season_filter]
         for _, row in df.iterrows():
             seed_str = row["Seed"]  # e.g. "W01", "X16a"
             region = seed_str[0]
             seed_num = int(seed_str[1:3])
-            ts = TourneySeed(
-                season=int(row["Season"]),
-                team_id=int(row["TeamID"]),
-                seed=seed_str,
-                seed_number=seed_num,
-                region=region,
+            # Delete existing seed for this team/season to avoid duplicates
+            session.query(TourneySeed).filter(
+                TourneySeed.season == int(row["Season"]),
+                TourneySeed.team_id == int(row["TeamID"]),
+            ).delete()
+            session.add(
+                TourneySeed(
+                    season=int(row["Season"]),
+                    team_id=int(row["TeamID"]),
+                    seed=seed_str,
+                    seed_number=seed_num,
+                    region=region,
+                )
             )
-            session.add(ts)
             count += 1
     session.commit()
     print(f"  {count} tourney seeds loaded")
@@ -217,13 +226,28 @@ def seed_game_results(session):
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seed database from Kaggle CSVs")
+    parser.add_argument(
+        "--seeds-only",
+        type=int,
+        metavar="SEASON",
+        help="Only load tourney seeds for a specific season (e.g. 2026)",
+    )
+    args = parser.parse_args()
+
     session = SessionLocal()
     try:
-        seed_teams(session)
-        seed_conferences(session)
-        seed_team_conferences(session)
-        seed_tourney_seeds(session)
-        seed_game_results(session)
+        if args.seeds_only:
+            print(f"Loading tourney seeds for season {args.seeds_only} only...")
+            seed_tourney_seeds(session, season_filter=args.seeds_only)
+        else:
+            seed_teams(session)
+            seed_conferences(session)
+            seed_team_conferences(session)
+            seed_tourney_seeds(session)
+            seed_game_results(session)
         print("\nDone! Database seeded successfully.")
     except Exception as e:
         session.rollback()

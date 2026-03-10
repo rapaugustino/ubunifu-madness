@@ -15,7 +15,6 @@ frozen snapshot from when the notebook was last run.
 
 import io
 import logging
-from functools import lru_cache
 
 import joblib
 import numpy as np

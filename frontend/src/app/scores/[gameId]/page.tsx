@@ -53,6 +53,8 @@ interface Game {
   broadcast: string | null;
   away: TeamScore;
   home: TeamScore;
+  gameType: "regular" | "conf_tourney" | "tourney" | null;
+  headline: string | null;
   winProb: { away: number; home: number } | null;
   lockedPrediction: LockedPrediction | null;
 }
@@ -283,6 +285,19 @@ export default function GameDetailPage() {
             </>
           )}
         </div>
+
+        {/* Tournament headline */}
+        {game.headline && game.gameType !== "regular" && (
+          <div className="text-center mb-4">
+            <span className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
+              game.gameType === "tourney"
+                ? "bg-accent/15 text-accent"
+                : "bg-purple-500/15 text-purple-400"
+            }`}>
+              {game.headline}
+            </span>
+          </div>
+        )}
 
         {/* Score display */}
         <div className="grid grid-cols-3 items-center gap-4 mb-4">

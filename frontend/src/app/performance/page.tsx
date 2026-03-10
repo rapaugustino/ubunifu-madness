@@ -263,8 +263,6 @@ export default function PerformancePage() {
 function CumulativeChart({ daily }: { daily: DailyData[] }) {
   if (daily.length === 0) return <div className="text-muted text-sm">No data yet.</div>;
 
-  const maxGames = Math.max(...daily.map(d => d.cumulativeTotal));
-
   return (
     <div className="bg-card border border-card-border rounded-xl p-4">
       <div className="text-xs text-muted mb-4">Cumulative Accuracy Over Time</div>

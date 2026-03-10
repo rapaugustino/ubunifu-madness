@@ -43,14 +43,14 @@ def recompute_records(session, gender: str) -> int:
     fixed = 0
     for s in stats:
         w = wins.get(s.team_id, 0)
-        l = losses.get(s.team_id, 0)
-        if w == 0 and l == 0:
+        loss_count = losses.get(s.team_id, 0)
+        if w == 0 and loss_count == 0:
             continue
-        total = w + l
+        total = w + loss_count
         wp = round(w / total, 4) if total > 0 else 0
-        if s.wins != w or s.losses != l:
+        if s.wins != w or s.losses != loss_count:
             s.wins = w
-            s.losses = l
+            s.losses = loss_count
             s.win_pct = wp
             fixed += 1
 
@@ -123,7 +123,7 @@ def main():
 
             print(f"\n  [{gender_label}] Total new games: {gender_new}")
 
-        print(f"\n=== Summary ===")
+        print("\n=== Summary ===")
         print(f"  New games added: {total_new}")
         print(f"  Skipped (duplicates/invalid): {total_skipped}")
         print(f"  Unmapped (no Kaggle ID): {total_unmapped}")

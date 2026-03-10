@@ -39,3 +39,7 @@ Thumbs.db
 node_modules/
 .next/
 out/
+
+# Docs and planning (local only)
+docs/
+ROADMAP.md

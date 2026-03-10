@@ -32,6 +32,8 @@ interface Game {
   broadcast: string | null;
   away: TeamScore;
   home: TeamScore;
+  gameType: "regular" | "conf_tourney" | "tourney" | null;
+  headline: string | null;
   winProb: { away: number; home: number } | null;
   lockedPrediction: {
     probAway: number;
@@ -120,6 +122,19 @@ function GameCard({ game }: { game: Game }) {
           )}
         </div>
       </div>
+
+      {/* Tournament headline */}
+      {game.headline && game.gameType !== "regular" && (
+        <div className="mb-2">
+          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+            game.gameType === "tourney"
+              ? "bg-accent/15 text-accent"
+              : "bg-purple-500/15 text-purple-400"
+          }`}>
+            {game.headline}
+          </span>
+        </div>
+      )}
 
       {/* Teams */}
       <div className="space-y-2">

@@ -11,8 +11,8 @@ _ctx = ssl.create_default_context()
 _ctx.check_hostname = False
 _ctx.verify_mode = ssl.CERT_NONE
 
-from app.database import SessionLocal
-from app.models import Team
+from app.database import SessionLocal  # noqa: E402
+from app.models import Team  # noqa: E402
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball"
 SPORTS = {

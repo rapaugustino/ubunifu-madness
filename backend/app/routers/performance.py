@@ -1,6 +1,5 @@
 """Model performance tracking — locked predictions and accuracy analytics."""
 
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, case

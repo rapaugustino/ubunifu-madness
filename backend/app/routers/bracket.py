@@ -375,7 +375,6 @@ def bracket_matchups(
         return {"season": season, "gender": gender, "matchups": []}
 
     all_team_ids = [team.id for _, team in seeds]
-    team_by_id = {team.id: team for _, team in seeds}
     elo_map, seed_map, conf_map, stats_map = _batch_load_maps(db, season, all_team_ids)
 
     # Build prediction cache

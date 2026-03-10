@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models import Team, TeamConference, TourneySeed, EloRating, TeamSeasonStats, ConferenceStrength, Conference
-from app.schemas.team import TeamBase, TeamDetail, TeamListResponse
+from app.schemas.team import TeamDetail, TeamListResponse
 
 router = APIRouter(tags=["teams"])
 
