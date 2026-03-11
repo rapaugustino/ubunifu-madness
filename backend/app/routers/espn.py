@@ -62,7 +62,7 @@ def live_scores(
 
             # Detect game type from ESPN data
             game_type = game.get("gameType", "regular")
-            headline = game.get("headline", "")
+            headline = game.get("headline") or ""
             if game_type == "tourney":
                 detected_type = "tourney"
             elif game_type == "conf_tourney" or "conference" in headline.lower():

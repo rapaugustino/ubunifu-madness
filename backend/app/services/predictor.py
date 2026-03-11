@@ -128,6 +128,36 @@ def reload_model_bundle():
     _model_loaded = False
 
 
+def _smooth_calibrate(calibrator, raw: float) -> float:
+    """Apply isotonic calibration with linear interpolation.
+
+    The raw IsotonicRegression.predict() produces a step function with few
+    unique output levels (because it was fitted on ~900 tournament games).
+    This causes prediction clustering.  Instead, we linearly interpolate
+    between the step midpoints to produce a smooth, continuous output.
+    """
+    xs = calibrator.X_thresholds_
+    ys = calibrator.y_thresholds_
+
+    # Build midpoints of each step (consecutive pairs share the same y)
+    mid_x = []
+    mid_y = []
+    i = 0
+    while i < len(xs):
+        # Find run of identical y values
+        j = i
+        while j < len(xs) - 1 and ys[j + 1] == ys[j]:
+            j += 1
+        mid_x.append((xs[i] + xs[j]) / 2)
+        mid_y.append(ys[i])
+        i = j + 1
+
+    if len(mid_x) < 2:
+        return float(calibrator.predict(np.array([[raw]]))[0])
+
+    return float(np.clip(np.interp(raw, mid_x, mid_y), 0.02, 0.98))
+
+
 # ---------------------------------------------------------------------------
 # Feature building from current DB state
 # ---------------------------------------------------------------------------
@@ -454,7 +484,7 @@ def predict_matchup(
                 raw = sum(p * w for p, w in zip(probs, weights)) / total_w
 
                 if bundle.calibrator:
-                    raw = bundle.calibrator.predict(np.array([[raw]]))[0]
+                    raw = _smooth_calibrate(bundle.calibrator, raw)
 
                 prob = float(np.clip(raw, 0.02, 0.98))
                 if is_conf_tourney:
