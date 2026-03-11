@@ -385,12 +385,8 @@ def get_tournament_teams(gender: str = "M") -> list[dict]:
                 continue
             # Check for tournament seed in notes
             seed = None
-            for note in comp.get("notes", []):
-                # e.g., "East Region - 1st Round" or seed in bracket
-                pass
-
             # Try to get seed from competitor
-            seed = seed or c.get("seed")
+            seed = c.get("seed")
 
             logos = t.get("logos", [])
             logo = t.get("logo") or (logos[0]["href"] if logos else None)

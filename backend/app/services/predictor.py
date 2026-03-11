@@ -551,5 +551,5 @@ def predict_matchup(
     if is_conf_tourney:
         prob = 0.5 + (prob - 0.5) * CONF_TOURNEY_COMPRESSION
 
-    prob = max(0.02, min(0.98, prob))
+    prob = float(np.clip(prob, 0.02, 0.98))
     return prob, source

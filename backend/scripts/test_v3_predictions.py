@@ -95,28 +95,29 @@ def main():
 
         if is_tossup:
             tossups += 1
-            result_str = "TOSSUP"
-        else:
-            confident_total += 1
-            if is_correct:
+
+        if is_correct:
+            correct += 1
+            if not is_tossup:
                 confident_correct += 1
-                correct += 1
-                result_str = "OK"
-            else:
-                correct += 0
-                result_str = "MISS"
-                misses.append({
-                    "winner": get_name(w_id),
-                    "loser": get_name(l_id),
-                    "prob": prob_lo,
-                    "confidence": confidence,
-                    "source": source,
-                })
+            result_str = "OK"
+        else:
+            result_str = "MISS"
+            misses.append({
+                "winner": get_name(w_id),
+                "loser": get_name(l_id),
+                "prob": prob_lo,
+                "confidence": confidence,
+                "source": source,
+            })
 
         if not is_tossup:
-            w_name = get_name(w_id)
-            l_name = get_name(l_id)
-            print(f"{w_name:<20} {l_name:<20} {prob_lo:>6.3f} {source:<14} {confidence:>4.1%} {result_str:>8}")
+            confident_total += 1
+
+        w_name = get_name(w_id)
+        l_name = get_name(l_id)
+        tag = " TOSSUP" if is_tossup else ""
+        print(f"{w_name:<20} {l_name:<20} {prob_lo:>6.3f} {source:<14} {confidence:>4.1%} {result_str:>8}{tag}")
 
     # Summary
     print(f"\n{'='*90}")
@@ -129,7 +130,7 @@ def main():
     if confident_total > 0:
         print(f"Confident accuracy: {confident_correct/confident_total:.1%}")
     if total > 0:
-        print(f"Overall accuracy:  {correct/total:.1%} (including tossups as wrong)")
+        print(f"Overall accuracy:  {correct/total:.1%} (tossups included)")
 
     print(f"\nPrediction sources:")
     for src, count in sorted(sources.items(), key=lambda x: -x[1]):

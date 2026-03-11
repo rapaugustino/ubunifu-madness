@@ -7,7 +7,7 @@ from app.database import Base
 class Team(Base):
     __tablename__ = "teams"
 
-    id = Column(Integer, primary_key=True)  # Kaggle TeamID: 1xxx=men, 3xxx=women
+    id = Column(Integer, primary_key=True)  # Kaggle TeamID; gender stored in gender column
     name = Column(String(100), nullable=False)
     gender = Column(String(1), nullable=False)  # 'M' or 'W'
     first_d1_season = Column(Integer, nullable=True)

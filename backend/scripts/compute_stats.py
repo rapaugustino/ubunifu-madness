@@ -265,6 +265,24 @@ def compute_team_season_stats(session, elo_by_season):
                 }
     print(f"  Massey: {len(massey_lookup)} teams")
 
+    # Precompute tournament participation and results for coach history
+    tourney_team_seasons = defaultdict(set)   # season -> set of team_ids that appeared
+    tourney_win_counts = defaultdict(int)     # (season, team_id) -> wins
+    tourney_game_counts = defaultdict(int)    # (season, team_id) -> games played
+    for csv_file in ["MNCAATourneyCompactResults.csv", "WNCAATourneyCompactResults.csv"]:
+        path = DATA_DIR / csv_file
+        if path.exists():
+            tdf = pd.read_csv(path)
+            for _, row in tdf.iterrows():
+                s = int(row["Season"])
+                w = int(row["WTeamID"])
+                l = int(row["LTeamID"])
+                tourney_team_seasons[s].add(w)
+                tourney_team_seasons[s].add(l)
+                tourney_win_counts[(s, w)] += 1
+                tourney_game_counts[(s, w)] += 1
+                tourney_game_counts[(s, l)] += 1
+
     # Load coaches (men's and women's if available)
     coach_lookup = {}
     for coaches_file in ["MTeamCoaches.csv", "WTeamCoaches.csv"]:
@@ -284,9 +302,25 @@ def compute_team_season_stats(session, elo_by_season):
                 ]
                 tenure = len(all_same["Season"].unique())
 
+                # Compute coach's tournament history at this team
+                tourney_apps = 0
+                tourney_wins = 0
+                tourney_games = 0
+                coach_seasons = sorted(all_same["Season"].unique())
+                for cs in coach_seasons:
+                    if cs >= TARGET_SEASON:
+                        continue
+                    if int(tid) in tourney_team_seasons.get(cs, set()):
+                        tourney_apps += 1
+                        tourney_wins += tourney_win_counts.get((cs, int(tid)), 0)
+                        tourney_games += tourney_game_counts.get((cs, int(tid)), 0)
+                march_wr = tourney_wins / tourney_games if tourney_games > 0 else None
+
                 coach_lookup[int(tid)] = {
                     "name": cname,
                     "tenure": tenure,
+                    "tourney_apps": tourney_apps if tourney_apps > 0 else None,
+                    "march_winrate": r(march_wr, 3),
                 }
 
     # Conference tourney wins
@@ -438,6 +472,8 @@ def compute_team_season_stats(session, elo_by_season):
             conf_tourney_wins=conf_tourney_wins.get(tid, 0),
             coach_name=co.get("name"),
             coach_tenure=co.get("tenure"),
+            coach_tourney_appearances=co.get("tourney_apps"),
+            coach_march_winrate=co.get("march_winrate"),
         ))
 
     session.bulk_save_objects(records)

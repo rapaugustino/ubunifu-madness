@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { TrendingUp, Check, X, Activity, Target, BarChart3 } from "lucide-react";
+import { TrendingUp, Check, X, Activity, Target, BarChart3, Info } from "lucide-react";
+import { Tooltip } from "@/components/Tooltip";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -70,12 +71,17 @@ function AccuracyBar({ accuracy, size = "md" }: { accuracy: number; size?: "sm" 
   );
 }
 
-function StatCard({ label, value, sub, icon: Icon }: { label: string; value: string; sub?: string; icon: React.ElementType }) {
+function StatCard({ label, value, sub, icon: Icon, tooltip }: { label: string; value: string; sub?: string; icon: React.ElementType; tooltip?: string }) {
   return (
     <div className="bg-card border border-card-border rounded-xl p-4">
       <div className="flex items-center gap-2 text-muted text-xs mb-2">
         <Icon size={14} />
         {label}
+        {tooltip && (
+          <Tooltip text={tooltip}>
+            <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
+          </Tooltip>
+        )}
       </div>
       <div className="text-2xl font-bold">{value}</div>
       {sub && <div className="text-xs text-muted mt-1">{sub}</div>}
@@ -163,21 +169,24 @@ export default function PerformancePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               icon={Target}
-              label="Confident Picks"
-              value={summary!.confidentAccuracy ? `${(summary!.confidentAccuracy * 100).toFixed(1)}%` : `${(summary!.accuracy! * 100).toFixed(1)}%`}
-              sub={`${summary!.confidentCorrect ?? summary!.correct}/${summary!.confidentTotal ?? summary!.total} correct${summary!.tossups ? ` · ${summary!.tossups} tossup${summary!.tossups > 1 ? "s" : ""}` : ""}`}
+              label="Overall Accuracy"
+              value={summary!.accuracy ? `${(summary!.accuracy * 100).toFixed(1)}%` : "—"}
+              sub={`${summary!.correct}/${summary!.total} correct${summary!.tossups ? ` · ${summary!.tossups} tossup${summary!.tossups > 1 ? "s" : ""}` : ""}`}
+              tooltip="Percentage of games where the model's favored team actually won. Includes all games — even tossups (close to 50/50) where the model had low confidence."
             />
             <StatCard
               icon={BarChart3}
               label="Brier Score"
               value={summary!.brierScore?.toFixed(4) || "—"}
               sub="Lower is better (0 = perfect)"
+              tooltip="Measures how close predicted probabilities are to actual outcomes. 0 = perfect predictions, 0.25 = coin-flip level. Rewards confident correct picks and penalizes confident wrong ones."
             />
             <StatCard
               icon={Activity}
               label="Games Tracked"
               value={String(summary!.total)}
               sub={`${daily.length} days`}
+              tooltip="Total games with locked pre-game predictions that have finished. Predictions are saved before tipoff and never changed — what the model said is what gets scored."
             />
             <StatCard
               icon={TrendingUp}
@@ -190,13 +199,19 @@ export default function PerformancePage() {
                 ? formatDate(daily.reduce((best, d) => (d.accuracy || 0) > (best.accuracy || 0) ? d : best).date, true)
                 : undefined
               }
+              tooltip="Highest single-day accuracy across all tracked days. Days with very few games can skew high."
             />
           </div>
 
           {/* Source breakdown */}
           {summary!.bySource && Object.keys(summary!.bySource).length > 0 && (
             <div className="bg-card border border-card-border rounded-xl p-4">
-              <div className="text-xs text-muted mb-3">Accuracy by Prediction Source</div>
+              <div className="text-xs text-muted mb-3 flex items-center gap-2">
+                Accuracy by Prediction Source
+                <Tooltip text="Different prediction methods are used depending on data availability. ML Ensemble uses the trained V3 model. Live Blend combines Elo ratings, momentum, and strength of schedule when the full model can't run.">
+                  <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
+                </Tooltip>
+              </div>
               <div className="flex flex-wrap gap-4">
                 {Object.entries(summary!.bySource).map(([src, data]) => {
                   const label: Record<string, string> = {
@@ -327,10 +342,15 @@ function CalibrationChart({ bins }: { bins: CalibrationBin[] }) {
 
   return (
     <div className="bg-card border border-card-border rounded-xl p-4">
-      <div className="text-xs text-muted mb-1">Calibration Curve</div>
+      <div className="text-xs text-muted mb-1 flex items-center gap-2">
+        Calibration Curve
+        <Tooltip text="Calibration shows whether the model's probabilities are trustworthy. If the model says 70% chance, the team should win ~70% of the time. Good calibration means you can take the percentages at face value.">
+          <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
+        </Tooltip>
+      </div>
       <div className="text-[10px] text-muted mb-4">
         Perfect calibration: predicted probability matches actual win rate.
-        Points on the diagonal line = well-calibrated.
+        Points close together = well-calibrated.
       </div>
 
       {/* Simple table-based calibration display */}
@@ -402,8 +422,22 @@ function GameLog({ games }: { games: RecentGame[] }) {
               <th className="text-left p-3 font-medium">Date</th>
               <th className="text-left p-3 font-medium">Matchup</th>
               <th className="text-center p-3 font-medium">Score</th>
-              <th className="text-center p-3 font-medium">Our Pick</th>
-              <th className="text-center p-3 font-medium">Confidence</th>
+              <th className="text-center p-3 font-medium">
+                <span className="inline-flex items-center gap-1">
+                  Our Pick
+                  <Tooltip text="The team the model predicted to win, locked before the game started. TOSSUP means confidence was below 55% — essentially a coin flip.">
+                    <Info size={10} className="text-muted/40 hover:text-muted cursor-help" />
+                  </Tooltip>
+                </span>
+              </th>
+              <th className="text-center p-3 font-medium">
+                <span className="inline-flex items-center gap-1">
+                  Confidence
+                  <Tooltip text="How sure the model was about its pick. 55% = barely leaning one way. 80%+ = very confident. Higher confidence misses are more costly to the Brier score.">
+                    <Info size={10} className="text-muted/40 hover:text-muted cursor-help" />
+                  </Tooltip>
+                </span>
+              </th>
               <th className="text-center p-3 font-medium">Result</th>
             </tr>
           </thead>
@@ -415,7 +449,7 @@ function GameLog({ games }: { games: RecentGame[] }) {
               const isTossup = confidence < 0.55;
               const awayWon = g.awayScore > g.homeScore;
               return (
-                <tr key={g.id} className={`border-b border-card-border/50 hover:bg-white/[0.02] ${isTossup ? "opacity-60" : ""}`}>
+                <tr key={g.id} className="border-b border-card-border/50 hover:bg-white/[0.02]">
                   <td className="p-3 text-muted">{formatDate(g.date, true)}</td>
                   <td className="p-3">
                     <span className={awayWon ? "font-semibold" : "text-muted"}>{g.awayName}</span>
@@ -426,19 +460,14 @@ function GameLog({ games }: { games: RecentGame[] }) {
                     {g.awayScore}-{g.homeScore}
                   </td>
                   <td className="p-3 text-center">
-                    {isTossup ? (
-                      <span className="text-yellow-400/80 text-[10px]">TOSSUP</span>
-                    ) : (
-                      <span className="text-muted">{favName}</span>
-                    )}
+                    <span className={isTossup ? "text-muted/60" : "text-muted"}>{favName}</span>
+                    {isTossup && <span className="text-yellow-400/70 text-[10px] ml-1">TOSSUP</span>}
                   </td>
                   <td className="p-3 text-center font-mono">
-                    {isTossup ? "~50%" : `${(confidence * 100).toFixed(0)}%`}
+                    {(confidence * 100).toFixed(0)}%
                   </td>
                   <td className="p-3 text-center">
-                    {isTossup ? (
-                      <span className="text-yellow-400/60 text-[10px]">—</span>
-                    ) : g.correct ? (
+                    {g.correct ? (
                       <span className="inline-flex items-center gap-0.5 text-green-400">
                         <Check size={12} /> ✓
                       </span>

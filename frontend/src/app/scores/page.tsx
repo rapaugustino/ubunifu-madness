@@ -157,19 +157,20 @@ function GameCard({ game }: { game: Game }) {
         const isTossup = confidence < 0.55;
         const modelPickedAway = game.winProb.away > game.winProb.home;
         const actualWinnerAway = game.away.score > game.home.score;
-        const modelCorrect = isFinal && !isTossup ? (modelPickedAway === actualWinnerAway) : null;
+        const modelCorrect = isFinal ? (modelPickedAway === actualWinnerAway) : null;
 
         return (
           <div className="mt-3 pt-3 border-t border-card-border">
             <div className="flex items-center justify-between text-xs text-muted mb-1">
               <span>{game.away.abbreviation} {(game.winProb.away * 100).toFixed(0)}%</span>
-              {isTossup ? (
-                <span className="text-[10px] text-yellow-400/80 font-medium">TOSSUP</span>
-              ) : isFinal && modelCorrect !== null ? (
+              {isFinal && modelCorrect !== null ? (
                 <span className={`flex items-center gap-1 text-[10px] font-medium ${modelCorrect ? "text-green-400" : "text-red-400"}`}>
                   {modelCorrect ? <Check size={10} /> : <X size={10} />}
                   {modelCorrect ? "MODEL CORRECT" : "MODEL MISSED"}
+                  {isTossup && <span className="text-yellow-400/80 ml-1">(TOSSUP)</span>}
                 </span>
+              ) : isTossup && !isFinal ? (
+                <span className="text-[10px] text-yellow-400/80 font-medium">TOSSUP</span>
               ) : (
                 <span className="flex items-center gap-1 text-[10px]">
                   <Lock size={8} className="text-muted/50" />
@@ -180,16 +181,17 @@ function GameCard({ game }: { game: Game }) {
             </div>
             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden flex">
               <div
-                className={`h-full rounded-l-full ${isTossup
-                  ? "bg-yellow-500/40"
-                  : isFinal && modelCorrect !== null
+                className={`h-full rounded-l-full ${
+                  isFinal && modelCorrect !== null
                     ? (modelCorrect ? "bg-green-500/70" : "bg-red-500/50")
+                    : isTossup
+                    ? "bg-yellow-500/40"
                     : "bg-accent/70"
                 }`}
                 style={{ width: `${game.winProb.away * 100}%` }}
               />
               <div
-                className={`h-full rounded-r-full ${isTossup ? "bg-yellow-500/20" : "bg-white/20"}`}
+                className={`h-full rounded-r-full ${isTossup && !isFinal ? "bg-yellow-500/20" : "bg-white/20"}`}
                 style={{ width: `${game.winProb.home * 100}%` }}
               />
             </div>
@@ -332,8 +334,8 @@ export default function ScoresPage() {
   const finalGames = games.filter((g) => g.status === "STATUS_FINAL");
   const scheduledGames = games.filter((g) => g.status === "STATUS_SCHEDULED");
 
-  // Daily model accuracy for final games with predictions (exclude tossups)
-  const gamesWithPredictions = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) >= 0.55);
+  // Daily model accuracy for final games with predictions (all games count)
+  const gamesWithPredictions = finalGames.filter((g) => g.winProb);
   const modelCorrectCount = gamesWithPredictions.filter((g) => {
     const pickedAway = g.winProb!.away > g.winProb!.home;
     const actualAway = g.away.score > g.home.score;

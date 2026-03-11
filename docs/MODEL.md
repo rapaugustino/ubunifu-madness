@@ -26,6 +26,30 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
 **Men's data:** 42 seasons (1985-2026), ~5,000+ regular season games/year
 **Women's data:** 17 seasons (2010-2026), ~5,000+ regular season games/year
 
+## Model Versions
+
+### V2 (Original)
+
+- **Training data:** 2003-2025 (23 seasons)
+- **Ensemble:** 76.4% LR + 23.6% LGB + 0% XGB
+- **CV Brier:** 0.1607
+- **Issues:** Overconfident on conference tournament games, prediction clustering from isotonic step function, stale training data from pre-modern basketball era
+
+### V3 (Current — March 2026)
+
+- **Training data:** 2012-2025 (modern era only — 3pt revolution, transfer portal, NIL)
+- **Ensemble:** 37.8% LR + 62.2% LGB (Optuna-optimized)
+- **CV Brier:** 0.1543 (calibrated)
+- **Stage 1 equivalent (2022-2025):** 0.1527
+- **Key improvements:**
+  - Optuna re-tuning of Elo and LGB on modern data
+  - Isotonic calibration fitted on 2018-2025 OOF predictions
+  - Smooth calibration via linear interpolation (fixes prediction clustering)
+  - Conference tournament compression (20% toward 0.5)
+  - Model artifact export for live deployment via `ModelArtifact` DB table
+
+**Notebook:** `notebooks/Ubunifu_Madness_V3_Modern.ipynb`
+
 ## Pipeline Overview
 
 ```mermaid
@@ -41,22 +65,27 @@ graph LR
     F --> G[Model Training]
     G --> H[Ensemble + Calibration]
     H --> I[Predictions CSV]
-    I --> J[load_predictions.py]
-    J --> K[(PostgreSQL)]
+    H --> J[Model Artifacts]
+    I --> K[load_predictions.py]
+    J --> L[upload_model_artifacts.py]
+    K --> M[(PostgreSQL)]
+    L --> M
 ```
 
 ## Step 1: Elo Rating System
 
-We compute custom Elo ratings for every team across all historical seasons. Elo parameters were tuned via Optuna to minimize Brier score on tournament predictions.
+We compute custom Elo ratings for every team across all historical seasons. Elo uses ALL data (1985+) for rating computation — more history = better ratings. But only 2012+ snapshots are used as features for the ML model.
 
-### Elo Parameters (Optuna-Tuned)
+### Elo Parameters (Optuna-Tuned on Modern Era)
 
-| Parameter | Value | Search Range | Purpose |
-|-----------|-------|-------------|---------|
-| K-Factor | 21.8 | 20-50 | How much a single game changes ratings |
-| Home Advantage | 101.9 | 60-150 | Elo points added for home team |
-| Season Regression | 0.89 | 0.55-0.90 | Carry-over between seasons (1.0 = no regression) |
-| Mean Elo | 1500 | Fixed | Starting rating for new teams |
+| Parameter | V2 Value | V3 Value | Search Range | Purpose |
+|-----------|----------|----------|-------------|---------|
+| K-Factor | 21.8 | **19.6** | 15-35 | How much a single game changes ratings |
+| Home Advantage | 101.9 | **90.9** | 50-150 | Elo points added for home team |
+| Season Regression | 0.89 | **0.950** | 0.70-0.95 | Carry-over between seasons (1.0 = no regression) |
+| Mean Elo | 1500 | 1500 | Fixed | Starting rating for new teams |
+
+V3 tuning found: lower K (less reactive to single games), lower home advantage (reflecting neutral-site tournament play), and higher regression (more carry-over year to year — modern rosters are more stable due to NIL).
 
 ### Elo Update Formula
 
@@ -75,14 +104,7 @@ The margin-of-victory (MOV) multiplier rewards dominant wins more, but is dampen
 new_elo = mean_elo + regression_factor * (old_elo - mean_elo)
 ```
 
-### Why Custom Elo Instead of Off-the-Shelf?
-
-- Standard 538-style Elo uses K=20, no MOV. Ours adds MOV multiplier and auto-correction for blowouts.
-- Optuna tuning found K=21.8 outperforms both lower (too slow to react) and higher (too noisy) values.
-- Home advantage of 101.9 Elo points matches the empirical home-court advantage in college basketball (~65% home win rate).
-- Season regression of 0.89 balances continuity (returning players) with roster turnover (graduation, transfers).
-
-## Step 2: Feature Engineering (27 Features)
+## Step 2: Feature Engineering (28 Features)
 
 Features are computed as **differences** between Team A and Team B (A - B), making the model symmetric.
 
@@ -103,35 +125,30 @@ Features are computed as **differences** between Team A and Team B (A - B), maki
 
 Seeds are the single most predictive feature historically — a 1-seed beats a 16-seed ~99% of the time.
 
-### Category 3: Conference Strength (7 features)
+### Category 3: Conference Strength (3 features)
 
 | Feature | Description |
 |---------|-------------|
-| `avg_elo_diff` | Mean conference Elo difference |
-| `elo_depth_diff` | Conference Elo std dev difference (depth of talent) |
-| `top5_elo_diff` | Average Elo of top 5 teams in conference |
-| `nc_winrate_diff` | Non-conference win rate (strength vs outside opponents) |
-| `tourney_hist_winrate_diff` | 5-year rolling tournament win rate by conference |
-| `conf_elo_std_diff` | Elo variability within conference |
-| `conf_strength_composite_diff` | Weighted composite of above metrics |
+| `conf_avg_elo_diff` | Mean conference Elo difference |
+| `conf_nc_winrate_diff` | Non-conference win rate (strength vs outside opponents) |
+| `conf_tourney_hist_winrate_diff` | 5-year rolling tournament win rate by conference |
 
-Conference strength captures whether a team's record came from playing in the Big Ten (hard) vs a mid-major (easier).
-
-### Category 4: Four Factors / Box Score Stats (9 features)
+### Category 4: Four Factors / Box Score Stats (10 features)
 
 Dean Oliver's Four Factors of basketball success, plus efficiency metrics:
 
 | Feature | Description |
 |---------|-------------|
-| `avg_eFGPct_diff` | Effective FG% (weights 3-pointers at 1.5x) |
-| `avg_TOPct_diff` | Turnover rate % |
-| `avg_ORPct_diff` | Offensive rebound % |
-| `avg_FTR_diff` | Free throw rate (FTA/FGA) |
-| `avg_OppeFGPct_diff` | Opponent effective FG% (defensive quality) |
-| `avg_OppTOPct_diff` | Opponent turnover rate (forced turnovers) |
-| `avg_OffEff_diff` | Offensive efficiency (points per 100 possessions) |
-| `avg_DefEff_diff` | Defensive efficiency |
-| `avg_Tempo_diff` | Pace (possessions per game) |
+| `efg_diff` | Effective FG% (weights 3-pointers at 1.5x) |
+| `to_diff` | Turnover rate % |
+| `or_diff` | Offensive rebound % |
+| `ftr_diff` | Free throw rate (FTA/FGA) |
+| `opp_efg_diff` | Opponent effective FG% (defensive quality) |
+| `opp_to_diff` | Opponent turnover rate (forced turnovers) |
+| `off_eff_diff` | Offensive efficiency (points per 100 possessions) |
+| `def_eff_diff` | Defensive efficiency |
+| `tempo_diff` | Pace (possessions per game) |
+| `win_pct_diff` | Season win percentage |
 
 ### Category 5: Ranking Systems (2 features)
 
@@ -140,16 +157,23 @@ Dean Oliver's Four Factors of basketball success, plus efficiency metrics:
 | `massey_rank_diff` | Average rank across top 15 computer systems |
 | `massey_disagreement_diff` | Std dev of rankings (consensus vs controversy) |
 
-Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) taken at day 133 (final pre-tournament snapshot). High disagreement signals teams that are hard to evaluate.
+Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) taken at day 133 (final pre-tournament snapshot).
 
-### Category 6: Momentum (2 features)
+### Category 6: Momentum (3 features)
 
 | Feature | Description |
 |---------|-------------|
 | `last_n_winpct_diff` | Win % over last 10 games |
 | `last_n_mov_diff` | Average margin of victory over last 10 games |
+| `efg_trend_diff` | eFG% trend (late vs early season) |
 
-These capture late-season form — a team on a 10-game win streak entering the tournament is different from one that limped in.
+### Category 7: Other (3 features)
+
+| Feature | Description |
+|---------|-------------|
+| `coach_tenure_diff` | Years coaching current team |
+| `conf_tourney_wins_diff` | Conference tournament wins |
+| `sos_diff` | Strength of schedule (avg opponent Elo) |
 
 ## Step 3: Model Training
 
@@ -158,109 +182,145 @@ These capture late-season form — a team on a 10-game win streak entering the t
 **Leave-One-Season-Out (LOSO):** For each of the 10 tournament seasons (2015-2025, excluding 2020 COVID), train on all other seasons and predict the held-out tournament.
 
 This is critical because:
-- Tournament games are rare (~67 per season per gender)
+- Tournament games are rare (~130 per season across both genders)
 - Seasons have different characteristics (rule changes, COVID disruption)
 - Prevents temporal leakage (never train on future data)
 
 ### Models Evaluated
 
-| Model | Brier Score | Notes |
-|-------|-------------|-------|
-| Logistic Regression | **0.1651** | Best individual model |
-| LightGBM | 0.1697 | Captures nonlinear patterns |
-| XGBoost | 0.1718 | Similar to LGB, slightly worse |
+| Model | V2 Brier | V3 Brier | Notes |
+|-------|----------|----------|-------|
+| Logistic Regression | 0.1651 | 0.1612 | Reliable baseline |
+| LightGBM | 0.1697 | 0.1589 | Improved with modern-era tuning |
+| Ensemble (pre-calibration) | 0.1646 | 0.1575 | LR+LGB weighted average |
+| **Ensemble (calibrated)** | **0.1607** | **0.1543** | After isotonic calibration |
 
-**Why Logistic Regression wins:** With only ~67 tournament games per season as test data and 27 features, the signal-to-noise ratio favors simpler models. LR's inductive bias (linear decision boundary) acts as strong regularization. The tree models overfit to training season patterns that don't generalize.
+In V3, LightGBM significantly improved with Optuna-tuned hyperparameters on modern data, flipping from worse-than-LR to better-than-LR.
 
-### Hyperparameter Tuning (Optuna)
+### LightGBM Hyperparameters (V3 Optuna-Tuned)
 
-**LightGBM best parameters:**
+| Parameter | V2 Value | V3 Value |
+|-----------|----------|----------|
+| n_estimators | 266 | 266 |
+| max_depth | 5 | 5 |
+| learning_rate | 0.0257 | 0.0111 |
+| num_leaves | 110 | 59 |
+| min_child_weight | 4.4 | 3.5 |
+| subsample | 0.72 | 0.886 |
+| colsample_bytree | 0.98 | 0.757 |
 
-| Parameter | Value |
-|-----------|-------|
-| n_estimators | 266 |
-| max_depth | 5 |
-| learning_rate | 0.0257 |
-| num_leaves | 110 |
-| min_child_weight | 4.4 |
-| subsample | 0.72 |
-| colsample_bytree | 0.98 |
+Key change: lower learning rate with fewer leaves = more regularization, preventing overfitting on the smaller modern-era training set.
 
 ## Step 4: Ensemble
 
-Ensemble weights were optimized via Optuna to minimize the combined Brier score:
+Ensemble weights were optimized via Nelder-Mead to minimize the combined Brier score on OOF predictions:
 
-```
-final_pred = 0.764 * LR_pred + 0.236 * LGB_pred + 0.000 * XGB_pred
-```
-
-XGBoost was assigned zero weight (redundant given LightGBM). The ensemble improves over LR alone because LightGBM captures a few nonlinear interactions that LR misses (e.g., seed-Elo interaction for mid-majors).
+| Version | LR Weight | LGB Weight | Notes |
+|---------|-----------|------------|-------|
+| V2 | 0.764 | 0.236 | LR-dominant (LGB overfit on old data) |
+| V3 | 0.378 | 0.622 | **LGB-dominant** (better tuned on modern data) |
 
 ## Step 5: Calibration
 
 Raw ensemble probabilities are systematically miscalibrated — the model tends to be overconfident for predictions near 0.5 and underconfident for strong favorites.
 
-**Method:** Isotonic regression (non-parametric monotonic calibration) trained on out-of-fold predictions.
+**Method:** Isotonic regression trained on out-of-fold predictions from 2018-2025 seasons only (recent data for better calibration).
 
-| Stage | Brier Score |
-|-------|-------------|
-| Best single model (LR) | 0.1651 |
-| Optimized ensemble | 0.1646 |
-| **After isotonic calibration** | **0.1607** |
+### The Prediction Clustering Problem (V3 Fix)
 
-Calibration improved the score by 0.0039 (2.4% relative improvement). The calibrated model's predicted probabilities match observed win rates much more closely across the full [0, 1] range.
+**Problem:** Standard isotonic regression produces a **step function** with ~17 unique output levels. With only ~900 OOF training points, the calibrator creates flat plateaus where continuous raw predictions (e.g., 0.226, 0.268, 0.311) all map to the same output (0.2451). This meant very different matchups showed identical predictions on the frontend.
 
-**Bounds:** Predictions are clipped to [0.02, 0.98] to avoid extreme confidence.
+**Root cause:** Isotonic regression is non-parametric — it groups inputs into bins where the observed outcome rate is constant. Small training sets produce coarse bins with few unique output values.
 
-## Feature Importance
+**Fix:** Smooth calibration via linear interpolation between step midpoints. Instead of a piecewise-constant function, we use a piecewise-linear function that preserves the calibrator's overall mapping while producing continuous, unique outputs.
 
-Top features by LightGBM gain importance:
+```python
+# Step function: raw 0.226 → 0.2451, raw 0.311 → 0.2451 (same!)
+# Smooth:       raw 0.226 → 0.2167, raw 0.311 → 0.2733 (unique!)
+```
 
-| Rank | Feature | Relative Importance |
-|------|---------|-------------------|
-| 1 | `seed_diff` | 31% |
-| 2 | `elo_prob` | 15% |
-| 3 | `elo_diff` | 12% |
-| 4 | `avg_elo_diff` (conference) | 8% |
-| 5 | `massey_rank_diff` | 7% |
-| 6 | `avg_eFGPct_diff` | 5% |
-| 7 | `avg_OffEff_diff` | 4% |
-| 8 | `nc_winrate_diff` | 4% |
-| 9 | `seed_a` | 3% |
-| 10 | `avg_DefEff_diff` | 3% |
+**Result:** 15/50 unique predictions → 50/50 unique predictions, while maintaining calibration accuracy.
 
-Seeds and Elo dominate. This makes intuitive sense — the NCAA selection committee already incorporates most statistical information into seed assignments.
+**Alternative considered:** Platt scaling (logistic) wouldn't cluster but can't capture non-linear miscalibration patterns. Our approach gets the best of both.
 
-## Year-by-Year Performance
+| Stage | V2 Brier | V3 Brier |
+|-------|----------|----------|
+| Best single model (LR) | 0.1651 | 0.1612 |
+| Optimized ensemble | 0.1646 | 0.1575 |
+| **After calibration** | **0.1607** | **0.1543** |
 
-| Season | Games | Brier Score | Notes |
-|--------|-------|-------------|-------|
-| 2015 | 130 | 0.1535 | |
-| 2016 | 127 | 0.1624 | |
-| 2017 | 127 | 0.1525 | |
-| 2018 | 127 | 0.1638 | First 16-over-1 upset (UMBC) |
-| 2019 | 127 | **0.1234** | Best year — chalk tournament |
-| 2021 | 127 | 0.1889 | Worst year — COVID disruption |
-| 2022 | 127 | 0.1627 | |
-| 2023 | 127 | 0.1701 | |
-| 2024 | 127 | 0.1451 | |
-| 2025 | 127 | 0.1598 | |
+## Step 6: Conference Tournament Compression
 
-The variance (0.1234 to 0.1889) is normal and expected. Some tournaments are more predictable than others — 2019 was relatively chalky while 2021 was chaotic after COVID.
+**Problem:** The model was trained on NCAA tournament games but evaluated on conference tournament games during the regular season. Same-conference teams know each other well — scouting, familiarity, and rivalry dynamics make these games less predictable than the model expects. The 60-70% confidence bin showed 65% predicted but only 43-53% actual win rate.
+
+**Fix:** For conference tournament games, compress predictions 20% toward 0.5:
+
+```python
+prob = 0.5 + (prob - 0.5) * 0.80  # e.g., 0.70 → 0.66
+```
+
+This reduces overconfidence for same-conference matchups without affecting NCAA tournament predictions.
+
+## Step 7: Tossup Threshold
+
+Games where the model's confidence is below 55% are classified as **tossups** and excluded from accuracy metrics. These are genuinely unpredictable matchups where calling them is essentially a coin flip.
+
+| Threshold | V2 | V3 | Rationale |
+|-----------|----|----|-----------|
+| Value | 52% | **55%** | Higher threshold = more honest about uncertainty |
+
+## Live Prediction Pipeline
+
+During the season, the predictor operates in a 3-layer cascade:
+
+1. **`ml_ensemble`** — V3 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. Highest quality.
+2. **`blended`** — If artifacts unavailable, blends static CSV predictions (30%) with live signals: Elo (30%), momentum (15%), conference (10%), record (10%), efficiency (5%).
+3. **`live_blend`** — If no static predictions, uses only live signals with reweighted proportions.
+4. **`no_data`** — Absolute fallback: 50%.
+
+Predictions are **locked before tipoff** via the `GamePrediction` table and never modified retroactively, enabling honest performance tracking.
+
+## Year-by-Year Performance (V3)
+
+| Season | Games | Brier Score | Accuracy | Notes |
+|--------|-------|-------------|----------|-------|
+| 2015 | 130 | 0.1350 | 80.0% | |
+| 2016 | 130 | 0.1681 | 76.9% | |
+| 2017 | 130 | 0.1496 | 74.6% | |
+| 2018 | 130 | 0.1665 | 75.4% | First 16-over-1 upset (UMBC) |
+| 2019 | 130 | 0.1436 | 74.6% | |
+| 2021 | 129 | 0.1696 | 75.2% | COVID disruption |
+| 2022 | 134 | 0.1669 | 73.1% | |
+| 2023 | 134 | 0.1759 | 73.1% | |
+| 2024 | 134 | 0.1424 | 76.9% | |
+| 2025 | 134 | **0.1255** | **85.8%** | Best year |
+
+**Stage 1 equivalent (2022-2025):** Brier = 0.1527
+
+## Live Performance (2026 Conference Tournaments)
+
+After deploying V3 with smooth calibration on March 10, 2026:
+
+| Metric | Old Model (model_v2 + blended) | V3 (ml_ensemble) |
+|--------|-------------------------------|-------------------|
+| Overall accuracy | 66.0% | **70.4%** |
+| Confident accuracy (>55%) | 62.8% | **74.7%** |
+| Tossups identified | 7 | 16 |
+| Unique probability values | ~15 (clustered) | 129/133 (smooth) |
 
 ## Interview Talking Points
 
-1. **Why Elo over just using seeds?** Seeds are discrete (1-16) and don't capture within-seed variation. A 1-seed that went 30-1 in the Big Ten is different from a 1-seed that went 28-3 in a mid-major. Elo provides continuous strength estimation.
+1. **Why retrain on modern data only (2012+)?** Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading. Models trained on 2003-2011 learn patterns (like dominant big men, program loyalty) that no longer apply.
 
-2. **Why not deep learning?** Small data problem. ~67 tournament games/year with 27 features. Even LightGBM (a relatively simple tree model) overfits compared to logistic regression. Neural networks would need orders of magnitude more data.
+2. **How did you fix the calibration clustering?** Isotonic regression with limited training data (~900 games) creates a step function with only ~17 output levels. We use linear interpolation between step midpoints to produce smooth, continuous probabilities while preserving the calibrator's overall mapping. This is a known limitation of non-parametric calibration on small samples.
 
-3. **Why isotonic calibration over Platt scaling?** Platt scaling assumes a sigmoid-shaped calibration curve. Our model's miscalibration isn't sigmoid-shaped — it has different biases at different probability ranges. Isotonic regression is flexible enough to correct any monotonic miscalibration pattern.
+3. **Why compress conference tournament predictions?** The model was trained on NCAA tournament games (teams from different conferences meeting on neutral courts) but evaluated on conference tournament games (same-conference teams who've played each other 2-3 times that season). Familiarity reduces predictability — a 20% compression toward 0.5 accounts for this domain shift.
 
-4. **What's the hardest part?** Feature engineering at the boundaries. Most teams in the tournament are good, so distinguishing between a 4-seed and a 5-seed requires subtle signals (late-season momentum, conference tournament performance, defensive efficiency trends) that have low signal-to-noise ratios.
+4. **Why did LightGBM improve so much in V3?** V2's LGB was trained on 2003-2025 data including early seasons where basketball was fundamentally different. On modern data (2012+), LGB's ability to capture nonlinear interactions (seed × Elo, conference strength × momentum) becomes valuable because the patterns are more consistent. With Optuna tuning on the right data distribution, LGB went from being the weaker model to the dominant one (62% weight).
 
-5. **How does it compare to Vegas?** The model's Brier score of 0.1607 is competitive with typical Kaggle leaderboard positions. Vegas closing lines typically achieve ~0.14 Brier score — our model is within striking distance but doesn't have access to injury reports, betting market information, or real-time lineup data.
+5. **What's the hardest part?** The train/deploy domain gap. The model trains on NCAA tournament games (~130/year) but predicts conference tournament games daily. These have different dynamics: familiarity effects, home-crowd advantages, auto-bid pressure. You have to engineer guardrails (compression, tossup threshold) rather than just trusting the model blindly.
 
-6. **What would improve it most?** (a) Player-level data (injuries, transfers, key player impact), (b) betting line information as features, (c) real-time in-season model retraining rather than end-of-season snapshots.
+6. **How does it compare to Vegas?** Our V3 CV Brier of 0.1543 is competitive. Vegas closing lines typically achieve ~0.14. The gap comes from injury reports, betting market information, and real-time lineup data that we don't have access to.
 
 ## Live Elo Updates
 

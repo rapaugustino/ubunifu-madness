@@ -109,10 +109,11 @@ export default function AboutPage() {
             pretending to have a strong pick would be misleading.
           </p>
           <p>
-            Tossup games appear in yellow on the Scores page instead of showing a directional pick.
-            They&apos;re excluded from accuracy metrics on the Performance page, so the model&apos;s
-            reported accuracy reflects only games where it had genuine conviction. The Performance
-            page shows how many games were tossups separately.
+            Tossup games still receive a prediction — the model picks whichever side has the
+            higher probability — and they count toward overall accuracy. On the Scores page,
+            tossup games show the model&apos;s result (correct or missed) with a yellow
+            &quot;TOSSUP&quot; label so you can see which low-confidence picks landed. The
+            Performance page includes tossups in its accuracy totals.
           </p>
         </div>
       </section>

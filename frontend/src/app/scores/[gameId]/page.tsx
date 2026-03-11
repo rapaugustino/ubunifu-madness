@@ -228,7 +228,7 @@ export default function GameDetailPage() {
   const modelPickedAway = wp ? wp.away > wp.home : false;
   const actualWinnerAway = game.away.score > game.home.score;
   const modelCorrect =
-    isFinal && wp && !isTossup
+    isFinal && wp
       ? modelPickedAway === actualWinnerAway
       : null;
 
@@ -378,9 +378,7 @@ export default function GameDetailPage() {
               <Lock size={12} className="text-muted/60" />
               Locked Prediction
             </h2>
-            {isTossup ? (
-              <span className="text-xs text-yellow-400/80 font-medium">TOSSUP</span>
-            ) : isFinal && modelCorrect !== null ? (
+            {isFinal && modelCorrect !== null ? (
               <span
                 className={`flex items-center gap-1 text-xs font-medium ${
                   modelCorrect ? "text-green-400" : "text-red-400"
@@ -388,7 +386,10 @@ export default function GameDetailPage() {
               >
                 {modelCorrect ? <Check size={12} /> : <X size={12} />}
                 {modelCorrect ? "MODEL CORRECT" : "MODEL MISSED"}
+                {isTossup && <span className="text-yellow-400/80 ml-1">(TOSSUP)</span>}
               </span>
+            ) : isTossup ? (
+              <span className="text-xs text-yellow-400/80 font-medium">TOSSUP</span>
             ) : (
               <span className="text-xs text-muted">Pre-game lock</span>
             )}
@@ -396,28 +397,28 @@ export default function GameDetailPage() {
 
           {/* Probability bar */}
           <div className="flex items-center justify-between text-sm mb-2">
-            <span className={modelPickedAway && !isTossup ? "font-semibold text-accent" : "text-muted"}>
+            <span className={modelPickedAway ? "font-semibold text-accent" : "text-muted"}>
               {game.away.abbreviation} {(wp.away * 100).toFixed(1)}%
             </span>
-            <span className={!modelPickedAway && !isTossup ? "font-semibold text-accent" : "text-muted"}>
+            <span className={!modelPickedAway ? "font-semibold text-accent" : "text-muted"}>
               {game.home.abbreviation} {(wp.home * 100).toFixed(1)}%
             </span>
           </div>
           <div className="h-3 bg-white/5 rounded-full overflow-hidden flex">
             <div
               className={`h-full rounded-l-full transition-all ${
-                isTossup
-                  ? "bg-yellow-500/40"
-                  : isFinal && modelCorrect !== null
+                isFinal && modelCorrect !== null
                   ? modelCorrect
                     ? "bg-green-500/70"
                     : "bg-red-500/50"
+                  : isTossup
+                  ? "bg-yellow-500/40"
                   : "bg-accent/70"
               }`}
               style={{ width: `${wp.away * 100}%` }}
             />
             <div
-              className={`h-full rounded-r-full ${isTossup ? "bg-yellow-500/20" : "bg-white/20"}`}
+              className={`h-full rounded-r-full ${isTossup && !isFinal ? "bg-yellow-500/20" : "bg-white/20"}`}
               style={{ width: `${wp.home * 100}%` }}
             />
           </div>

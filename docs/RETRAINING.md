@@ -6,11 +6,11 @@ Step-by-step instructions for retraining the model with fresh data — whether f
 
 | Scenario | What to Run | Time |
 |----------|------------|------|
-| New season starts | Full pipeline (Steps 1-7) | ~20 min |
-| New Kaggle data drop | Steps 2-7 | ~15 min |
+| New season starts | Full pipeline (Steps 1-8) | ~30 min |
+| New Kaggle data drop | Steps 2-8 | ~20 min |
 | Daily Elo updates (automatic) | `cron_elo_update.py` | ~30 sec |
 | After Selection Sunday | Seeds refresh endpoint | ~5 sec |
-| Model architecture changes | Steps 3-7 | ~15 min |
+| Model architecture changes | Steps 3-8 | ~20 min |
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ Step-by-step instructions for retraining the model with fresh data — whether f
 
 ## Step 1: Download Fresh Data from Kaggle
 
-Go to [March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025/data) and download all CSV files.
+Go to [March Machine Learning Mania](https://www.kaggle.com/competitions/march-machine-learning-mania-2025/data) and download all CSV files.
 
 Place them in `data/raw/`. Required files:
 
@@ -30,24 +30,14 @@ Place them in `data/raw/`. Required files:
 | `MRegularSeasonCompactResults.csv` | Men's game scores (1985-present) |
 | `MRegularSeasonDetailedResults.csv` | Men's box scores (2003-present) |
 | `MNCAATourneyCompactResults.csv` | Men's tournament results |
-| `MNCAATourneyDetailedResults.csv` | Men's tournament box scores |
 | `MNCAATourneySeeds.csv` | Men's tournament seeds |
-| `MNCAATourneySlots.csv` | Men's bracket structure |
 | `MTeams.csv` | Men's team IDs and names |
 | `MTeamConferences.csv` | Men's conference membership by season |
 | `MTeamCoaches.csv` | Men's coaching records |
-| `MTeamSpellings.csv` | Name variant mappings |
 | `MMasseyOrdinals.csv` | Computer ranking systems |
 | `MConferenceTourneyGames.csv` | Conference tournament results |
 | `Conferences.csv` | Conference names |
-| `WRegularSeasonCompactResults.csv` | Women's equivalents... |
-| `WRegularSeasonDetailedResults.csv` | |
-| `WNCAATourneyCompactResults.csv` | |
-| `WNCAATourneyDetailedResults.csv` | |
-| `WNCAATourneySeeds.csv` | |
-| `WNCAATourneySlots.csv` | |
-| `WTeams.csv` | |
-| `WTeamConferences.csv` | |
+| `W*.csv` | Women's equivalents of all above |
 
 ## Step 2: Regenerate Derived Statistics
 
@@ -61,8 +51,8 @@ python3 -m scripts.compute_stats
 **What it does:**
 1. Processes all regular season and tournament games chronologically
 2. Computes Elo ratings for every team at end-of-season (snapshot_day=154)
-3. Calculates conference strength metrics (avg_elo, depth, top5, non-conf winrate, tourney history)
-4. Computes team season stats for the current season (Four Factors, efficiency, Massey rankings, momentum, coach info)
+3. Calculates conference strength metrics (avg_elo, nc_winrate, tourney history)
+4. Computes team season stats for the current season (Four Factors, efficiency, Massey, momentum, coach, SOS)
 
 **Output:**
 - `elo_ratings` table: ~15,000 rows (all teams, all seasons)
@@ -71,97 +61,100 @@ python3 -m scripts.compute_stats
 
 **Time:** ~2 minutes
 
-## Step 3: Run the ML Notebook
+## Step 3: Run the V3 Notebook
 
 Open and run the Jupyter notebook:
 
 ```bash
 cd notebooks
-jupyter notebook Ubunifu_Madness_March_ML_Mania.ipynb
+jupyter notebook Ubunifu_Madness_V3_Modern.ipynb
 ```
 
-The notebook runs in order:
+The notebook runs in 7 parts:
 
 1. **Data loading** — Reads all CSVs, merges game results with seeds and features
-2. **Feature engineering** — Builds the 27-feature matrix for all historical tournament matchups
-3. **Elo parameter tuning** (optional) — Optuna search over K, home_adv, season_regression. Skip if using existing parameters.
-4. **Model training** — Trains LR, LightGBM, XGBoost with leave-one-season-out CV
-5. **Ensemble optimization** — Optuna search over ensemble weights
-6. **Calibration** — Isotonic regression on out-of-fold predictions
-7. **Submission generation** — Creates `stage1_submission_v2.csv` and `stage2_submission_v2.csv`
+2. **Elo parameter tuning** — Optuna (60 trials) tunes K, home_adv, regression on modern data
+3. **Feature engineering** — Builds the 28-feature matrix for all 2012+ tournament matchups
+4. **Model training** — LOSO CV with LR + Optuna-tuned LightGBM, ensemble weight optimization, isotonic calibration on 2018+ OOF predictions
+5. **Evaluation** — Per-season Brier scores, calibration curves, feature importance
+6. **Final training** — Train on all 2012-2025 data, generate Kaggle submission CSVs
+7. **Artifact export** — Save models to `artifacts/` directory (lr_v3.joblib, lgb_v3.joblib, calibrator_v3.joblib, model_metadata_v3.json)
 
-**Output:** Submission CSV in `submissions/` directory with format:
-```
-ID,Pred
-2026_1101_1102,0.678
+**Key configuration** (at the top of the notebook):
+```python
+MIN_TRAIN_SEASON = 2012  # Modern era only
+INCLUDE_CONF_TOURNEY = False  # Toggle: True for better live, False for pure tourney
+CALIBRATION_SEASONS = [2018, 2019, 2021, 2022, 2023, 2024, 2025]
 ```
 
-**Time:** ~5-10 minutes (longer if re-tuning Elo parameters)
+**Output:**
+- `submissions/stage1_submission_v3_modern.csv` — Stage 1 submission
+- `submissions/stage2_submission_v3_modern.csv` — Stage 2 submission
+- `artifacts/*.joblib` — Model artifacts for live deployment
+- `artifacts/model_metadata_v3.json` — Feature columns, weights, config
+
+**Time:** ~10-15 minutes (includes Optuna tuning)
 
 ## Step 4: Submit Predictions to Kaggle
 
-Upload your submission CSVs to the Kaggle competition page for scoring.
-
 ```bash
-# Install Kaggle CLI if not already
-pip install kaggle
-
-# Submit Stage 1 predictions (before tournament starts)
+# Submit Stage 2 predictions (after Selection Sunday)
 kaggle competitions submit \
   -c march-machine-learning-mania-2025 \
-  -f submissions/stage1_submission_v2.csv \
-  -m "Stage 1 - LR+LGB ensemble v2"
-
-# Submit Stage 2 predictions (after Selection Sunday, when bracket is set)
-kaggle competitions submit \
-  -c march-machine-learning-mania-2025 \
-  -f submissions/stage2_submission_v2.csv \
-  -m "Stage 2 - LR+LGB ensemble v2"
+  -f submissions/stage2_submission_v3_modern.csv \
+  -m "Stage 2 - V3 modern era LR+LGB ensemble"
 ```
 
 **Stage 1 vs Stage 2:**
-- **Stage 1**: Predictions for all possible team pairs. Scored on games played before Selection Sunday.
-- **Stage 2**: Same format, but scored only on actual tournament games. You can update predictions between stages based on conference tournament results, injury news, etc.
+- **Stage 1**: All possible team pairs. Scored on games before Selection Sunday.
+- **Stage 2**: Same format, scored on actual tournament games. Can update between stages.
 
-Check your score on the [competition leaderboard](https://www.kaggle.com/competitions/march-machine-learning-mania-2025/leaderboard). Our model's Brier score benchmark is **0.1607** on historical cross-validation.
+## Step 5: Upload Model Artifacts to Database
 
-> **Tip:** You can submit up to 2 times per day. Submit Stage 1 early and iterate. For Stage 2, wait until after Selection Sunday when you have actual seeds to maximize accuracy.
-
-## Step 5: Load Predictions into Database
+This enables the live prediction pipeline to use the trained V3 models instead of falling back to signal blending.
 
 ```bash
 cd backend
-python3 -m scripts.load_predictions ../submissions/stage2_submission_v2.csv
+python3 -m scripts.upload_model_artifacts --version v3 --artifact-dir ../notebooks/artifacts/
 ```
 
 **What it does:**
-1. Clears existing v2 predictions from the `predictions` table
+1. Deactivates any existing active model artifacts
+2. Uploads LR, LGB, and calibrator as binary blobs to the `model_artifacts` table
+3. Stores feature columns and ensemble weights in metadata
+4. Sets new artifacts as active
+
+**After uploading:** Restart the server to clear the cached model bundle. New predictions will use the `ml_ensemble` path.
+
+## Step 6: Load Predictions into Database
+
+```bash
+cd backend
+python3 -m scripts.load_predictions ../submissions/stage2_submission_v3_modern.csv
+```
+
+**What it does:**
+1. Clears existing predictions from the `predictions` table
 2. Parses each row: `SEASON_TEAMAID_TEAMBID` → season, team_a_id, team_b_id
-3. Infers gender from team_a_id (< 2000 = Men's, >= 2000 = Women's)
+3. Infers gender from team_a_id (< 3000 = Men's, >= 3000 = Women's)
 4. Bulk inserts predictions in batches of 10,000
 
-**Output:** ~140,000+ prediction rows (all possible team pairs for tournament-eligible teams)
+## Step 7: Regenerate Live Predictions (Optional)
 
-## Step 6: Update ESPN Team Mappings
-
-Only needed when new teams appear in the dataset or ESPN changes team IDs.
+If you want to re-lock predictions for past dates with the new model:
 
 ```bash
 cd backend
-python3 -m scripts.espn_team_mapper
+# Dry run first to see what will be affected
+python3 -m scripts.regenerate_predictions --from-date 20260308 --dry-run
+
+# Run for real
+python3 -m scripts.regenerate_predictions --from-date 20260308
 ```
 
-**What it does:**
-1. Fetches all NCAA basketball teams from ESPN API
-2. Matches ESPN teams to Kaggle team IDs using name variants from `MTeamSpellings.csv`
-3. Updates `espn_id`, `logo_url`, and `color` in the `teams` table
-4. Saves mapping to `data/espn_team_map.json`
+This deletes old `GamePrediction` records and regenerates them by re-fetching each date from ESPN and running the new predictor. Outcomes are automatically re-resolved for completed games.
 
-**Coverage:** ~355 men's teams, ~353 women's teams successfully mapped.
-
-## Step 7: Verify
-
-Check that everything loaded correctly:
+## Step 8: Verify
 
 ```bash
 # Backend health
@@ -173,8 +166,12 @@ curl "http://localhost:8000/api/rankings/power?gender=M&limit=5"
 # Predictions should return probabilities
 curl "http://localhost:8000/api/predictions/1242/1211"
 
-# Team details should have stats
-curl "http://localhost:8000/api/teams/1242?season=2026"
+# Performance summary should show ml_ensemble source
+curl "http://localhost:8000/api/performance/summary"
+
+# Test V3 predictions against past games
+cd backend
+python3 -m scripts.test_v3_predictions
 ```
 
 ## New Season Checklist
@@ -185,10 +182,11 @@ When a new season starts (e.g., transitioning from 2026 to 2027):
    - `backend/scripts/compute_stats.py` — `SEASON = 2027`
    - `backend/scripts/update_elo_live.py` — `SEASON = 2027`
    - `backend/app/routers/espn.py` — `SEASON = 2027`
+   - `backend/app/services/predictor.py` — `SEASON = 2027`
 
 2. **Download new Kaggle CSVs** with the latest season's data
 
-3. **Run the full pipeline** (Steps 2-6 above)
+3. **Run the full pipeline** (Steps 2-7 above)
 
 4. **After Selection Sunday** — refresh tournament seeds:
    ```bash
@@ -210,28 +208,20 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=M"
 curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 ```
 
-**Cron setup** (runs at 6 AM daily):
-```
-0 6 * * * cd /path/to/backend && python3 -m scripts.cron_elo_update >> /var/log/elo_update.log 2>&1
-```
-
-This processes yesterday's and today's completed games for both men's and women's, updates Elo ratings, team records, and conference strength metrics. It's idempotent — safe to run multiple times.
-
-## Refreshing Win/Loss Records
-
-To bulk-update all team records from ESPN (useful at start of season or after data issues):
-
-```bash
-curl -X POST "http://localhost:8000/api/records/refresh?gender=M"
-curl -X POST "http://localhost:8000/api/records/refresh?gender=W"
-```
+**Cron pipeline** (`backend/scripts/cron_elo_update.py`) runs daily:
+1. Elo rating updates from ESPN game results
+2. Game result ingestion
+3. Win/loss record updates
+4. Player stats refresh
+5. SOS (strength of schedule) recomputation
 
 ## Troubleshooting
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
 | `compute_stats.py` fails on missing CSV | Kaggle data not downloaded | Download all CSVs to `data/raw/` |
-| Predictions missing for some teams | Team pair not in submission CSV | Re-run notebook with updated team list |
-| ESPN mapping gaps | New team or name change | Re-run `espn_team_mapper.py` |
-| Elo ratings stale | Cron not running | Check cron logs, run manually |
+| Predictions all show same probability | Isotonic calibration clustering | V3 uses smooth calibration; ensure artifacts are uploaded |
+| ESPN 500 error on scores | `headline` field is None | Fixed in V3: `game.get("headline") or ""` |
+| ml_ensemble not used | Model artifacts not in DB | Run `upload_model_artifacts.py` and restart server |
+| Conference tourney overconfidence | Model trained on NCAA tourney | V3 applies 20% compression for conf tourney games |
 | Duplicate game results | Script ran twice before commit | Deduplication is built-in, safe to re-run |
