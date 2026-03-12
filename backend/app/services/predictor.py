@@ -101,12 +101,15 @@ def load_model_bundle(db: Session) -> ModelBundle | None:
     metadata = {}
 
     for a in artifacts:
-        if a.name == "lr_final" and a.artifact_blob:
-            lr = _load_blob(a.artifact_blob)
-        elif a.name == "lgb_final" and a.artifact_blob:
-            lgb = _load_blob(a.artifact_blob)
-        elif a.name == "calibrator" and a.artifact_blob:
-            calibrator = _load_blob(a.artifact_blob)
+        try:
+            if a.name == "lr_final" and a.artifact_blob:
+                lr = _load_blob(a.artifact_blob)
+            elif a.name == "lgb_final" and a.artifact_blob:
+                lgb = _load_blob(a.artifact_blob)
+            elif a.name == "calibrator" and a.artifact_blob:
+                calibrator = _load_blob(a.artifact_blob)
+        except (OSError, Exception) as e:
+            logger.warning(f"Failed to load artifact '{a.name}': {e}")
         if a.metadata_json:
             metadata.update(a.metadata_json)
 
