@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Trophy,
   BarChart3,
@@ -9,21 +12,24 @@ import {
   TrendingUp,
   Radio,
   Award,
+  Database,
 } from "lucide-react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const features = [
   {
     icon: Radio,
     title: "Live Scores & Predictions",
     description:
-      "Real-time ESPN scores with blended win probabilities locked before tipoff. Track model accuracy as games finish.",
+      "Real-time ESPN scores with model win probabilities locked before tipoff. Track accuracy as games finish.",
     href: "/scores",
   },
   {
     icon: Trophy,
     title: "Interactive Bracket",
     description:
-      "Build your bracket with AI win probabilities for every matchup. Click to advance teams or let the model auto-fill.",
+      "Build your bracket with model win probabilities for every matchup. Click to advance teams or let the model auto-fill.",
     href: "/bracket",
   },
   {
@@ -37,14 +43,14 @@ const features = [
     icon: GitCompareArrows,
     title: "Head-to-Head Compare",
     description:
-      "Compare any two teams side-by-side with stat breakdowns, conference context, recent meetings, and AI analysis.",
+      "Compare any two teams side-by-side — Elo, efficiency, style matchup analysis, conference context, and recent meetings.",
     href: "/compare",
   },
   {
     icon: MessageSquare,
     title: "Madness Agent",
     description:
-      "AI bracket advisor with 6 tools — look up any team, get blended predictions, check live scores, find upset picks.",
+      "An AI assistant with 7 tools — powered by our prediction model. Look up teams, get matchup breakdowns, find upset picks.",
     href: "/chat",
   },
   {
@@ -58,19 +64,27 @@ const features = [
     icon: Target,
     title: "Performance Tracking",
     description:
-      "Full transparency: cumulative accuracy charts, daily breakdowns, calibration curves, and a game-by-game log.",
+      "Full transparency: cumulative accuracy, daily breakdowns, calibration curves, and a game-by-game prediction log.",
     href: "/performance",
   },
 ];
 
-const stats = [
-  { label: "Prediction Signals", value: "7", subtext: "Elo, model, AdjEM, momentum, conf, SOS, efficiency" },
-  { label: "Brier Score", value: "0.1543", subtext: "V3 calibrated ensemble" },
-  { label: "Training Games", value: "4,302", subtext: "Men's + Women's tournaments" },
-  { label: "Model Features", value: "28", subtext: "Elo, conf, box scores, Massey" },
-];
+interface AccuracyData {
+  men: { total: number; correct: number; accuracy: number | null };
+  women: { total: number; correct: number; accuracy: number | null };
+  overall: { total: number; correct: number; accuracy: number | null };
+}
 
 export default function Home() {
+  const [accuracy, setAccuracy] = useState<AccuracyData | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/performance/homepage-stats`)
+      .then((r) => r.json())
+      .then(setAccuracy)
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen">
       {/* Hero */}
@@ -88,10 +102,11 @@ export default function Home() {
             </h1>
 
             <p className="text-xl text-muted mb-8 max-w-2xl mx-auto">
-              Seven prediction signals blended in real time — Elo, ML model,
+              A machine learning system that predicts NCAA basketball outcomes.
+              Seven statistical signals — Elo ratings, a calibrated LR+LightGBM ensemble,
               opponent-adjusted efficiency, momentum, conference strength, schedule
-              difficulty, and efficiency. Predictions locked before tipoff, accuracy
-              tracked transparently. An AI agent that breaks down any matchup on demand.
+              difficulty, and efficiency — blended into a single win probability.
+              Predictions locked before tipoff, accuracy tracked transparently.
             </p>
 
             <div className="flex items-center justify-center gap-4">
@@ -112,21 +127,66 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats bar */}
+      {/* Live accuracy + model stats */}
       <section className="border-y border-card-border bg-card/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="text-3xl font-bold text-accent">
-                  {stat.value}
-                </div>
-                <div className="text-sm font-medium text-foreground mt-1">
-                  {stat.label}
-                </div>
-                <div className="text-xs text-muted mt-0.5">{stat.subtext}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
+            {/* Live accuracy */}
+            <div className="text-center">
+              <div className="text-3xl font-bold text-accent">
+                {accuracy?.overall.accuracy
+                  ? `${(accuracy.overall.accuracy * 100).toFixed(1)}%`
+                  : "—"}
               </div>
-            ))}
+              <div className="text-sm font-medium text-foreground mt-1">Overall Accuracy</div>
+              <div className="text-xs text-muted mt-0.5">
+                {accuracy ? `${accuracy.overall.correct}/${accuracy.overall.total} games` : "Loading..."}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-400">
+                {accuracy?.men.accuracy
+                  ? `${(accuracy.men.accuracy * 100).toFixed(1)}%`
+                  : "—"}
+              </div>
+              <div className="text-sm font-medium text-foreground mt-1">Men&apos;s</div>
+              <div className="text-xs text-muted mt-0.5">
+                {accuracy?.men ? `${accuracy.men.correct}/${accuracy.men.total}` : "—"}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-pink-400">
+                {accuracy?.women.accuracy
+                  ? `${(accuracy.women.accuracy * 100).toFixed(1)}%`
+                  : "—"}
+              </div>
+              <div className="text-sm font-medium text-foreground mt-1">Women&apos;s</div>
+              <div className="text-xs text-muted mt-0.5">
+                {accuracy?.women ? `${accuracy.women.correct}/${accuracy.women.total}` : "—"}
+              </div>
+            </div>
+
+            {/* Divider on desktop */}
+            <div className="hidden lg:flex items-center justify-center">
+              <div className="h-12 w-px bg-card-border" />
+            </div>
+
+            {/* Model stats */}
+            <div className="text-center">
+              <div className="text-3xl font-bold text-foreground">7</div>
+              <div className="text-sm font-medium text-foreground mt-1">Prediction Signals</div>
+              <div className="text-xs text-muted mt-0.5">Blended ensemble</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-foreground">28</div>
+              <div className="text-sm font-medium text-foreground mt-1">Model Features</div>
+              <div className="text-xs text-muted mt-0.5">Elo, conf, box scores</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-foreground">0.154</div>
+              <div className="text-sm font-medium text-foreground mt-1">CV Brier Score</div>
+              <div className="text-xs text-muted mt-0.5">2012-2025 test set</div>
+            </div>
           </div>
         </div>
       </section>
@@ -135,31 +195,30 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-20">
         <h2 className="text-3xl font-bold text-center mb-4">How It Works</h2>
         <p className="text-muted text-center mb-12 max-w-xl mx-auto">
-          ML predicts. AI explains. You decide.
+          Data in. Predictions out. Full transparency.
         </p>
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="p-6 rounded-xl bg-card border border-card-border">
             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-4">
-              <Brain className="text-blue-400" size={20} />
+              <Database className="text-blue-400" size={20} />
             </div>
-            <h3 className="font-semibold text-lg mb-2">1. Six Signals Blend</h3>
+            <h3 className="font-semibold text-lg mb-2">1. Daily Data Pipeline</h3>
             <p className="text-sm text-muted">
-              Elo ratings, a 31-feature ML ensemble, momentum, conference strength,
-              SOS-adjusted records, and efficiency combine into a single win
-              probability — updated daily from ESPN.
+              ESPN game results flow in daily. Elo ratings update, advanced stats
+              recompute, records reconcile. Every prediction uses the latest state.
             </p>
           </div>
 
           <div className="p-6 rounded-xl bg-card border border-card-border">
             <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mb-4">
-              <Target className="text-accent" size={20} />
+              <Brain className="text-accent" size={20} />
             </div>
-            <h3 className="font-semibold text-lg mb-2">2. AI Explains Why</h3>
+            <h3 className="font-semibold text-lg mb-2">2. Seven-Signal Blend</h3>
             <p className="text-sm text-muted">
-              Our AI analyzes every matchup — conference context, momentum, pace
-              matchups, historical upset rates. Not vibes, data-driven basketball
-              analysis.
+              A calibrated LR+LightGBM ensemble trained on 4,302 tournament games,
+              blended with Elo, opponent-adjusted efficiency, momentum, conference
+              strength, SOS, and raw efficiency into a single probability.
             </p>
           </div>
 
@@ -167,10 +226,10 @@ export default function Home() {
             <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mb-4">
               <TrendingUp className="text-green-400" size={20} />
             </div>
-            <h3 className="font-semibold text-lg mb-2">3. Build Your Bracket</h3>
+            <h3 className="font-semibold text-lg mb-2">3. Lock, Track, Learn</h3>
             <p className="text-sm text-muted">
-              Use AI picks, your gut, or a mix. The bracket chat agent helps you
-              make informed picks — ask it anything about any matchup.
+              Predictions lock before tipoff and never change. Every outcome is
+              scored. Calibration curves, Brier scores, and game logs — all public.
             </p>
           </div>
         </div>
@@ -205,7 +264,6 @@ export default function Home() {
           })}
         </div>
       </section>
-
     </div>
   );
 }

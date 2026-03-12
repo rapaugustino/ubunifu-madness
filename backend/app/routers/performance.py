@@ -98,6 +98,42 @@ def performance_summary(
 
 
 # ---------------------------------------------------------------------------
+# Homepage stats (combined M + W + overall)
+# ---------------------------------------------------------------------------
+
+@router.get("/performance/homepage-stats")
+def homepage_stats(
+    season: int = SEASON,
+    db: Session = Depends(get_db),
+):
+    """Lightweight accuracy stats for the homepage hero section."""
+    results = {}
+    for gender, label in [("M", "men"), ("W", "women")]:
+        resolved = db.query(GamePrediction).filter(
+            GamePrediction.season == season,
+            GamePrediction.gender == gender,
+            GamePrediction.model_correct.isnot(None),
+        ).all()
+        total = len(resolved)
+        correct = sum(1 for gp in resolved if gp.model_correct)
+        results[label] = {
+            "total": total,
+            "correct": correct,
+            "accuracy": round(correct / total, 4) if total > 0 else None,
+        }
+
+    # Overall
+    all_total = results["men"]["total"] + results["women"]["total"]
+    all_correct = results["men"]["correct"] + results["women"]["correct"]
+    results["overall"] = {
+        "total": all_total,
+        "correct": all_correct,
+        "accuracy": round(all_correct / all_total, 4) if all_total > 0 else None,
+    }
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Daily breakdown
 # ---------------------------------------------------------------------------
 
