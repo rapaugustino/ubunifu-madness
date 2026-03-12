@@ -126,7 +126,7 @@ def live_scores(
                 "probAway": round(locked.locked_prob_away, 3),
                 "probHome": round(1 - locked.locked_prob_away, 3),
                 "source": locked.prediction_source,
-                "explanation": locked.explanation,
+                "explanation": explain_matchup(db, locked.away_team_id, locked.home_team_id),
                 "lockedAt": locked.locked_at.isoformat() if locked.locked_at else None,
                 "resolved": locked.model_correct is not None,
                 "correct": locked.model_correct,

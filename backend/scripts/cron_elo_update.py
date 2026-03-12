@@ -9,7 +9,10 @@ Pipeline:
 2. Conference strength refresh
 3. Player box score ingestion
 4. Season stats recomputation + importance scoring
-5. Prediction locking for upcoming games (via scores endpoint on next access)
+5. SOS refresh
+6. Advanced stats (adjusted efficiency, luck, etc.)
+7. Record reconciliation from ESPN
+8. Lock today's predictions (consistent pre-game state)
 
 Run from backend/:
     python3 -m scripts.cron_elo_update
@@ -32,11 +35,80 @@ from app.services.player_sync import (
     recompute_season_stats,
     compute_importance_scores,
 )
-from app.models import PlayerSeasonStats, GameResult, EloRating, TeamSeasonStats, Team
+from app.models import PlayerSeasonStats, GameResult, EloRating, TeamSeasonStats, Team, GamePrediction
 from app.services import espn
+from app.services.predictor import predict_matchup
 
 
 SEASON = 2026
+
+
+def lock_todays_predictions(session, gender: str) -> int:
+    """Pre-lock predictions for all of today's games so they use a consistent state.
+
+    Fetches today's scoreboard from ESPN, maps teams to Kaggle IDs, and creates
+    GamePrediction rows for any game that doesn't already have one.
+    """
+    today_str = datetime.now().strftime("%Y%m%d")
+    games = espn.get_scoreboard(today_str, gender)
+
+    espn_map = {
+        t.espn_id: t
+        for t in session.query(Team).filter(
+            Team.espn_id.isnot(None), Team.gender == gender
+        ).all()
+    }
+
+    locked_count = 0
+    for game in games:
+        espn_gid = str(game["id"])
+        away_espn = game.get("away", {}).get("espnId")
+        home_espn = game.get("home", {}).get("espnId")
+        away_team = espn_map.get(away_espn)
+        home_team = espn_map.get(home_espn)
+        if not away_team or not home_team:
+            continue
+
+        # Skip if already locked
+        existing = session.query(GamePrediction).filter(
+            GamePrediction.espn_game_id == espn_gid
+        ).first()
+        if existing:
+            continue
+
+        # Detect game type
+        game_type_raw = game.get("gameType", "regular")
+        headline = game.get("headline") or ""
+        if game_type_raw == "tourney":
+            detected_type = "tourney"
+        elif game_type_raw == "conf_tourney" or "conference" in headline.lower():
+            detected_type = "conf_tourney"
+        else:
+            detected_type = "regular"
+
+        is_conf_tourney = detected_type == "conf_tourney"
+        prob_away, source = predict_matchup(
+            session, away_team.id, home_team.id, is_conf_tourney=is_conf_tourney
+        )
+
+        pred = GamePrediction(
+            espn_game_id=espn_gid,
+            game_date=today_str,
+            season=SEASON,
+            gender=gender,
+            away_team_id=away_team.id,
+            home_team_id=home_team.id,
+            away_name=game["away"].get("name"),
+            home_name=game["home"].get("name"),
+            locked_prob_away=prob_away,
+            prediction_source=source,
+            game_type=detected_type,
+        )
+        session.add(pred)
+        locked_count += 1
+
+    session.flush()
+    return locked_count
 
 
 def reconcile_records(session, gender: str) -> int:
@@ -201,6 +273,18 @@ def run():
             except Exception as e:
                 session.rollback()
                 print(f"[{gender_label}] Record reconciliation error: {e}")
+
+            # --- Stage 7: Lock today's predictions ---
+            try:
+                locked_count = lock_todays_predictions(session, gender)
+                session.commit()
+                if locked_count > 0:
+                    print(f"[{gender_label}] Locked predictions for {locked_count} games")
+                else:
+                    print(f"[{gender_label}] All predictions already locked")
+            except Exception as e:
+                session.rollback()
+                print(f"[{gender_label}] Prediction locking error: {e}")
 
         print("\n=== Done ===")
     except Exception as e:

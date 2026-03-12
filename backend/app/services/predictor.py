@@ -477,7 +477,7 @@ def _advanced_analytics_probability(db: Session, team_a_id: int, team_b_id: int)
 # Prediction (main entry point)
 # ---------------------------------------------------------------------------
 
-CONF_TOURNEY_COMPRESSION = 0.80  # Shrink confidence 20% for conference tourney games
+CONF_TOURNEY_COMPRESSION = 0.90  # Shrink confidence 10% for conference tourney games
 TOSSUP_THRESHOLD = 0.55  # Games below this confidence are tossups
 
 
