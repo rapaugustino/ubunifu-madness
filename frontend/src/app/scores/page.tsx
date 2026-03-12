@@ -40,6 +40,7 @@ interface Game {
     probAway: number;
     probHome: number;
     source: string;
+    explanation: string | null;
     lockedAt: string | null;
     resolved: boolean;
     correct: boolean | null;
@@ -196,6 +197,9 @@ function GameCard({ game }: { game: Game }) {
                 style={{ width: `${game.winProb.home * 100}%` }}
               />
             </div>
+            {game.lockedPrediction?.explanation && (
+              <p className="text-[10px] text-muted mt-1">{game.lockedPrediction.explanation}</p>
+            )}
           </div>
         );
       })()}

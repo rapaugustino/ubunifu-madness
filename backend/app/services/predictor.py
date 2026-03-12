@@ -588,3 +588,121 @@ def predict_matchup(
 
     prob = float(np.clip(prob, 0.02, 0.98))
     return prob, source
+
+
+# ---------------------------------------------------------------------------
+# Explanation generator
+# ---------------------------------------------------------------------------
+
+_SIGNAL_LABELS = {
+    "elo": ("Elo", "{diff:+.0f} Elo edge"),
+    "advanced_analytics": ("AdjEM", "{diff:+.1f} AdjEM advantage"),
+    "efficiency": ("Efficiency", "{diff:+.1f} net efficiency edge"),
+    "momentum": ("Momentum", "{pct}% last-10 win rate vs {opp_pct}%"),
+    "record": ("Record", "{rec_a} vs {rec_b} record"),
+    "conference": ("Conference", "stronger conference ({conf_a} vs {conf_b})"),
+    "static_model": ("Model", "ML model edge"),
+}
+
+
+def explain_matchup(
+    db: Session,
+    team_a_id: int,
+    team_b_id: int,
+) -> str:
+    """Generate a 1-line human-readable explanation of why team A is favored/unfavored.
+
+    Computes all signals, identifies the top 2-3 factors driving the prediction,
+    and returns a concise summary like "Duke favored: +12 AdjEM edge, stronger SOS".
+    """
+    # Load teams
+    team_a = db.query(Team).filter(Team.id == team_a_id).first()
+    team_b = db.query(Team).filter(Team.id == team_b_id).first()
+    if not team_a or not team_b:
+        return ""
+
+    # Compute each signal and its contribution (distance from 0.5)
+    signal_funcs = {
+        "elo": _elo_probability,
+        "advanced_analytics": _advanced_analytics_probability,
+        "efficiency": _efficiency_probability,
+        "momentum": _momentum_probability,
+        "record": _record_probability,
+        "conference": _conference_probability,
+        "static_model": _static_model_probability,
+    }
+
+    contributions = []
+    for key, func in signal_funcs.items():
+        prob = func(db, team_a_id, team_b_id)
+        if prob is not None:
+            weight = BLEND_WEIGHTS.get(key, 0.1)
+            contribution = abs(prob - 0.5) * weight
+            contributions.append((key, prob, contribution))
+
+    if not contributions:
+        return ""
+
+    # Sort by contribution descending, take top 3
+    contributions.sort(key=lambda x: x[2], reverse=True)
+    top = contributions[:3]
+
+    # Load supporting data for formatting
+    stats_a = db.query(TeamSeasonStats).filter(TeamSeasonStats.season == SEASON, TeamSeasonStats.team_id == team_a_id).first()
+    stats_b = db.query(TeamSeasonStats).filter(TeamSeasonStats.season == SEASON, TeamSeasonStats.team_id == team_b_id).first()
+    elo_a = db.query(EloRating).filter(EloRating.season == SEASON, EloRating.team_id == team_a_id).first()
+    elo_b = db.query(EloRating).filter(EloRating.season == SEASON, EloRating.team_id == team_b_id).first()
+    conf_a = db.query(TeamConference).filter(TeamConference.season == SEASON, TeamConference.team_id == team_a_id).first()
+    conf_b = db.query(TeamConference).filter(TeamConference.season == SEASON, TeamConference.team_id == team_b_id).first()
+
+    # Determine who is favored
+    overall_prob, _ = predict_matchup(db, team_a_id, team_b_id)
+    favored = team_a if overall_prob >= 0.5 else team_b
+
+    # Build factor descriptions
+    factors = []
+    for key, prob, _ in top:
+        if key == "elo" and elo_a and elo_b:
+            diff = elo_a.elo - elo_b.elo
+            if overall_prob < 0.5:
+                diff = -diff
+            factors.append(f"{abs(diff):+.0f} Elo edge")
+        elif key == "advanced_analytics" and stats_a and stats_b:
+            if stats_a.adj_net_eff is not None and stats_b.adj_net_eff is not None:
+                diff = stats_a.adj_net_eff - stats_b.adj_net_eff
+                if overall_prob < 0.5:
+                    diff = -diff
+                factors.append(f"{abs(diff):+.1f} AdjEM advantage")
+        elif key == "momentum" and stats_a and stats_b:
+            pct_a = round((stats_a.last_n_winpct or 0.5) * 100)
+            pct_b = round((stats_b.last_n_winpct or 0.5) * 100)
+            if overall_prob >= 0.5:
+                factors.append(f"hot streak ({pct_a}% last 10)")
+            else:
+                factors.append(f"hot streak ({pct_b}% last 10)")
+        elif key == "record" and stats_a and stats_b:
+            rec_a = f"{stats_a.wins}-{stats_a.losses}" if stats_a.wins is not None else "?"
+            rec_b = f"{stats_b.wins}-{stats_b.losses}" if stats_b.wins is not None else "?"
+            if overall_prob >= 0.5:
+                factors.append(f"stronger record ({rec_a} vs {rec_b})")
+            else:
+                factors.append(f"stronger record ({rec_b} vs {rec_a})")
+        elif key == "conference" and conf_a and conf_b:
+            if overall_prob >= 0.5:
+                factors.append(f"tougher conference ({conf_a.conf_abbrev})")
+            else:
+                factors.append(f"tougher conference ({conf_b.conf_abbrev})")
+        elif key == "efficiency" and stats_a and stats_b:
+            net_a = (stats_a.avg_off_eff or 0) - (stats_a.avg_def_eff or 0)
+            net_b = (stats_b.avg_off_eff or 0) - (stats_b.avg_def_eff or 0)
+            diff = net_a - net_b
+            if overall_prob < 0.5:
+                diff = -diff
+            factors.append(f"{abs(diff):+.1f} net efficiency edge")
+        elif key == "static_model":
+            factors.append("ML model edge")
+
+    if not factors:
+        return ""
+
+    return f"{favored.name} favored: {', '.join(factors)}"

@@ -9,6 +9,8 @@ from app.models.team_stats import TeamSeasonStats
 from app.models.model_artifact import ModelArtifact
 from app.models.game_prediction import GamePrediction
 from app.models.player import Player, PlayerSeasonStats, PlayerGameLog
+from app.models.user import User
+from app.models.user_bracket import UserBracket
 
 __all__ = [
     "Team",
@@ -25,4 +27,6 @@ __all__ = [
     "Player",
     "PlayerSeasonStats",
     "PlayerGameLog",
+    "User",
+    "UserBracket",
 ]

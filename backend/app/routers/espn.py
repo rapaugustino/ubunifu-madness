@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import Team, EloRating, TourneySeed, TeamSeasonStats, GamePrediction, GameResult
 from app.services import espn
-from app.services.predictor import predict_matchup
+from app.services.predictor import predict_matchup, explain_matchup
 
 router = APIRouter(tags=["espn"])
 
@@ -84,6 +84,7 @@ def live_scores(
                 prob_away, source = predict_matchup(
                     db, away_kid, home_kid, is_conf_tourney=is_conf_tourney
                 )
+                expl = explain_matchup(db, away_kid, home_kid)
                 locked = GamePrediction(
                     espn_game_id=espn_gid,
                     game_date=date_str,
@@ -95,6 +96,7 @@ def live_scores(
                     home_name=game["home"].get("name"),
                     locked_prob_away=prob_away,
                     prediction_source=source,
+                    explanation=expl,
                     game_type=detected_type,
                 )
                 db.add(locked)
@@ -124,6 +126,7 @@ def live_scores(
                 "probAway": round(locked.locked_prob_away, 3),
                 "probHome": round(1 - locked.locked_prob_away, 3),
                 "source": locked.prediction_source,
+                "explanation": locked.explanation,
                 "lockedAt": locked.locked_at.isoformat() if locked.locked_at else None,
                 "resolved": locked.model_correct is not None,
                 "correct": locked.model_correct,

@@ -28,6 +28,7 @@ class GamePrediction(Base):
     locked_prob_away = Column(Float, nullable=False)  # P(away wins) at lock time
     locked_at = Column(DateTime, server_default=func.now(), nullable=False)
     prediction_source = Column(String(20), nullable=False)  # "ml_ensemble", "blended", "live_blend"
+    explanation = Column(String(300), nullable=True)  # Human-readable "why" for this prediction
     game_type = Column(String(20), nullable=True)  # "regular", "conf_tourney", "tourney"
 
     # Outcome (filled after game ends)

@@ -51,12 +51,27 @@ interface TeamDetail {
   } | null;
 }
 
+interface StyleInfo {
+  name: string;
+  traits: string[];
+  summary: string;
+}
+
+interface StyleAnalysis {
+  teamAStyle: StyleInfo;
+  teamBStyle: StyleInfo;
+  clashInsights: string[];
+  summary: string;
+}
+
 interface CompareResult {
   teamA: TeamDetail;
   teamB: TeamDetail;
   winProbA: number;
   winProbB: number;
   featureComparison: FeatureComparison[];
+  explanation: string | null;
+  styleAnalysis: StyleAnalysis | null;
 }
 
 const statCategories = [
@@ -273,7 +288,10 @@ function CompareContent() {
               seedA={comparison.teamA.seed ?? undefined}
               seedB={comparison.teamB.seed ?? undefined}
             />
-            <div className="mt-4 flex justify-center">
+            {comparison.explanation && (
+              <p className="text-xs text-muted text-center mt-3">{comparison.explanation}</p>
+            )}
+            <div className="mt-3 flex justify-center">
               <button
                 onClick={getAIAnalysis}
                 disabled={analyzing}
@@ -364,6 +382,46 @@ function CompareContent() {
               </div>
             </div>
           </div>
+
+          {/* Style Matchup */}
+          {comparison.styleAnalysis && (
+            <div className="mt-6 p-6 rounded-xl bg-card border border-card-border">
+              <h3 className="text-sm font-medium text-muted uppercase tracking-wider mb-4">
+                Style Matchup
+              </h3>
+              <div className="grid md:grid-cols-2 gap-6 mb-4">
+                {[comparison.styleAnalysis.teamAStyle, comparison.styleAnalysis.teamBStyle].map((style, idx) => (
+                  <div key={idx}>
+                    <div className="text-sm font-medium mb-2">{style.name}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {style.traits.map((trait) => (
+                        <span
+                          key={trait}
+                          className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                            idx === 0
+                              ? "bg-accent/5 border-accent/15 text-accent"
+                              : "bg-blue-500/5 border-blue-500/15 text-blue-400"
+                          }`}
+                        >
+                          {trait}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {comparison.styleAnalysis.clashInsights.length > 0 && (
+                <div className="space-y-2 pt-4 border-t border-card-border">
+                  <div className="text-xs text-muted uppercase tracking-wider mb-2">Key Matchup Factors</div>
+                  {comparison.styleAnalysis.clashInsights.map((insight, idx) => (
+                    <p key={idx} className="text-xs text-muted leading-relaxed">
+                      {insight}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Conference context */}
           <div className="mt-6 p-6 rounded-xl bg-card border border-card-border">

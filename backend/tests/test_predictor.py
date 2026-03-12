@@ -61,11 +61,11 @@ class TestBlendWeights:
         assert "static_model" not in LIVE_ONLY_WEIGHTS
 
     def test_blend_keys(self):
-        expected = {"static_model", "elo", "efficiency", "momentum", "conference", "record"}
+        expected = {"static_model", "elo", "advanced_analytics", "efficiency", "momentum", "conference", "record"}
         assert set(BLEND_WEIGHTS.keys()) == expected
 
     def test_live_only_keys(self):
-        expected = {"elo", "efficiency", "momentum", "conference", "record"}
+        expected = {"elo", "advanced_analytics", "efficiency", "momentum", "conference", "record"}
         assert set(LIVE_ONLY_WEIGHTS.keys()) == expected
 
     def test_all_weights_positive(self):

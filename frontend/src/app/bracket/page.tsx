@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useGender } from "@/hooks/useGender";
-import { Sparkles, RefreshCw, Download, Trophy, X } from "lucide-react";
+import { useBracketSync } from "@/hooks/useBracketSync";
+import { Sparkles, RefreshCw, Download, Trophy, X, Save, Check, CloudDownload } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -305,6 +306,78 @@ function AnalysisPanel({
   );
 }
 
+function EmailModal({
+  mode,
+  onSubmit,
+  onClose,
+}: {
+  mode: "save" | "load";
+  onSubmit: (email: string) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setError("");
+    setSubmitting(true);
+    const ok = await onSubmit(email.trim());
+    setSubmitting(false);
+    if (!ok) setError("Invalid email or server error. Try again.");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-background border border-card-border rounded-xl p-6 w-full max-w-sm mx-4">
+        <h3 className="text-lg font-semibold mb-1">
+          {mode === "save" ? "Save Your Bracket" : "Load Your Bracket"}
+        </h3>
+        <p className="text-sm text-muted mb-4">
+          {mode === "save"
+            ? "Enter your email to save picks across devices."
+            : "Enter the email you used to save your bracket."}
+        </p>
+        <form onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full px-3 py-2 rounded-lg bg-card border border-card-border text-sm focus:outline-none focus:border-accent mb-3"
+          />
+          {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={submitting || !email.trim()}
+              className="flex-1 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              {submitting ? "..." : mode === "save" ? "Save" : "Load"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-white/5 text-muted rounded-lg text-sm hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function BracketPage() {
   const [bracket, setBracket] = useState<BracketData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -317,6 +390,18 @@ export default function BracketPage() {
     championProbabilities: { teamId: number; teamName: string; probability: number }[];
     finalFourProbabilities: { teamId: number; teamName: string; probability: number }[];
   } | null>(null);
+
+  const sync = useBracketSync(
+    bracket?.season ?? 0,
+    gender,
+    picks,
+    (loadedPicks) => {
+      setPicks(loadedPicks);
+      if (bracket) {
+        localStorage.setItem(picksKey(bracket.season, gender), JSON.stringify(loadedPicks));
+      }
+    },
+  );
 
   const fetchBracket = useCallback(async () => {
     setLoading(true);
@@ -557,6 +642,40 @@ export default function BracketPage() {
             <Download size={14} />
             Export
           </button>
+          {!isHistorical && (
+            sync.isConnected ? (
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1 text-xs text-green-400">
+                  <Check size={12} />
+                  {sync.saving ? "Saving..." : "Saved"}
+                </span>
+                <button
+                  onClick={sync.disconnect}
+                  className="text-xs text-muted hover:text-foreground transition-colors"
+                  title="Disconnect account"
+                >
+                  {sync.email}
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={sync.openSaveModal}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-accent/10 text-accent rounded-lg text-sm font-medium hover:bg-accent/20 transition-colors"
+                >
+                  <Save size={14} />
+                  Save
+                </button>
+                <button
+                  onClick={sync.openLoadModal}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/5 text-muted rounded-lg text-sm hover:text-foreground hover:bg-white/10 transition-colors"
+                >
+                  <CloudDownload size={14} />
+                  Load
+                </button>
+              </>
+            )
+          )}
         </div>
       </div>
 
@@ -758,6 +877,15 @@ export default function BracketPage() {
       {/* AI Analysis slide-over */}
       {analysisMatchup && (
         <AnalysisPanel matchup={analysisMatchup} onClose={() => setAnalysisMatchup(null)} />
+      )}
+
+      {/* Email modal for save/load */}
+      {sync.showModal && (
+        <EmailModal
+          mode={sync.modalMode}
+          onSubmit={sync.identify}
+          onClose={() => sync.setShowModal(false)}
+        />
       )}
     </div>
   );

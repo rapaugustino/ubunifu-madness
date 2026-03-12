@@ -25,7 +25,8 @@ from app.models import (
     TourneySeed, ConferenceStrength, Prediction, Conference,
 )
 from app.services import espn
-from app.services.predictor import predict_matchup
+from app.services.predictor import predict_matchup, explain_matchup
+from app.services.style_analysis import analyze_style_matchup
 
 router = APIRouter(tags=["chat"])
 
@@ -89,9 +90,10 @@ TOOLS = [
         "name": "lookup_team",
         "description": (
             "Look up a college basketball team by name. Returns Elo rating, record, "
-            "conference, tournament seed, and detailed season stats (Four Factors, "
-            "efficiency, momentum, coach info). Use this when the user asks about a "
-            "specific team."
+            "conference, tournament seed, detailed season stats (Four Factors, "
+            "efficiency, momentum, coach info), and advanced analytics (AdjEM, Barthag, "
+            "luck, true shooting %, upset vulnerability). Use this when the user asks "
+            "about a specific team."
         ),
         "input_schema": {
             "type": "object",
@@ -107,8 +109,9 @@ TOOLS = [
     {
         "name": "get_matchup_prediction",
         "description": (
-            "Get the blended 6-signal win probability prediction for a matchup between two teams. "
-            "Combines Elo, static model, momentum, conference strength, SOS-adjusted record, and efficiency. "
+            "Get the blended 7-signal win probability prediction for a matchup between two teams. "
+            "Combines Elo, static model, advanced analytics (AdjEM + luck regression), momentum, "
+            "conference strength, SOS-adjusted record, and efficiency. "
             "Returns each team's win probability, confidence level, tossup status, and key stat comparisons. "
             "Use this when the user asks who would win, or about a specific matchup."
         ),
@@ -204,6 +207,31 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "build_bracket",
+        "description": (
+            "Build a complete NCAA tournament bracket by predicting all 63 games. "
+            "Requires tournament seeds to be available (after Selection Sunday). "
+            "Uses our 7-signal model to predict each matchup round by round. "
+            "Supports strategies: 'chalk' (pick all favorites), 'balanced' (some upsets), "
+            "'chaos' (maximize upsets). Use this when users ask to fill out their bracket, "
+            "build a bracket, or ask for AI bracket picks."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "strategy": {
+                    "type": "string",
+                    "description": (
+                        "Bracket strategy: 'chalk' picks all favorites, "
+                        "'balanced' flips ~30% of close games to underdogs, "
+                        "'chaos' picks underdogs in any game with >30% win probability. "
+                        "Default: 'balanced'"
+                    ),
+                },
+            },
+        },
+    },
 ]
 
 
@@ -258,6 +286,17 @@ def _team_detail(db: Session, team: Team) -> dict:
             "oppEFG%": round(stats.avg_opp_efg_pct * 100, 1) if stats.avg_opp_efg_pct and stats.avg_opp_efg_pct < 1 else stats.avg_opp_efg_pct,
             "strengthOfSchedule": round(stats.sos, 1) if stats.sos else None,
         }
+        # Advanced analytics (opponent-adjusted metrics)
+        if stats.adj_net_eff is not None:
+            result["advancedStats"] = {
+                "adjEM": round(stats.adj_net_eff, 1),
+                "adjOE": round(stats.adj_off_eff, 1) if stats.adj_off_eff else None,
+                "adjDE": round(stats.adj_def_eff, 1) if stats.adj_def_eff else None,
+                "barthag": round(stats.barthag, 4) if stats.barthag else None,
+                "luck": round(stats.luck, 3) if stats.luck is not None else None,
+                "trueShootingPct": round(stats.true_shooting_pct * 100, 1) if stats.true_shooting_pct else None,
+                "upsetVulnerability": round(stats.upset_vulnerability, 3) if stats.upset_vulnerability is not None else None,
+            }
         if stats.last_n_winpct is not None:
             result["momentum"] = {
                 "last10WinPct": f"{stats.last_n_winpct * 100:.0f}%",
@@ -289,7 +328,7 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
     if not team_b:
         return {"error": f"Team not found: '{input_data['team_b_name']}'"}
 
-    # Use the blended 6-signal predictor (team_a is "away", team_b is "home")
+    # Use the blended 7-signal predictor (team_a is "away", team_b is "home")
     prob_a, source = predict_matchup(db, team_a.id, team_b.id)
 
     detail_a = _team_detail(db, team_a)
@@ -298,7 +337,10 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
     confidence = max(prob_a, 1 - prob_a)
     is_tossup = confidence < 0.55
 
-    return {
+    explanation = explain_matchup(db, team_a.id, team_b.id)
+    style = analyze_style_matchup(db, team_a.id, team_b.id)
+
+    result = {
         "teamA": detail_a,
         "teamB": detail_b,
         "prediction": {
@@ -308,8 +350,12 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
             "confidence": f"{confidence * 100:.1f}%",
             "isTossup": is_tossup,
             "source": source,
+            "explanation": explanation,
         },
     }
+    if style:
+        result["styleMatchup"] = style
+    return result
 
 
 def _exec_get_conference(db: Session, gender: str, input_data: dict) -> dict:
@@ -547,6 +593,214 @@ def _exec_get_upset_candidates(db: Session, gender: str, input_data: dict) -> di
     return {"message": "Tournament bracket available. Use get_matchup_prediction for specific matchup analysis."}
 
 
+def _exec_build_bracket(db: Session, gender: str, input_data: dict) -> dict:
+    """Build a complete 63-game bracket using our prediction model."""
+    import random
+
+    strategy = input_data.get("strategy", "balanced").lower()
+    if strategy not in ("chalk", "balanced", "chaos"):
+        strategy = "balanced"
+
+    # Fetch tournament seeds
+    seeds = (
+        db.query(TourneySeed, Team)
+        .join(Team, Team.id == TourneySeed.team_id)
+        .filter(TourneySeed.season == SEASON, Team.gender == gender)
+        .order_by(TourneySeed.seed_number)
+        .all()
+    )
+
+    if not seeds:
+        return {
+            "error": "Tournament seeds are not available yet. Check back after Selection Sunday (March 16, 2026).",
+        }
+
+    # Group by region
+    regions: dict[str, list[dict]] = {}
+    for seed, team in seeds:
+        region = seed.region or "?"
+        if region not in regions:
+            regions[region] = []
+        elo = db.query(EloRating).filter(EloRating.season == SEASON, EloRating.team_id == team.id).first()
+        regions[region].append({
+            "teamId": team.id,
+            "name": team.name,
+            "seed": seed.seed_number,
+            "elo": round(elo.elo, 1) if elo else 1500,
+        })
+
+    # Standard 1v16, 8v9, 5v12, 4v13, 6v11, 3v14, 7v10, 2v15 bracket order
+    SEED_MATCHUPS = [(1, 16), (8, 9), (5, 12), (4, 13), (6, 11), (3, 14), (7, 10), (2, 15)]
+
+    def pick_winner(team_a: dict, team_b: dict) -> tuple[dict, float, str]:
+        """Predict and pick a winner based on strategy."""
+        prob_a, source = predict_matchup(db, team_a["teamId"], team_b["teamId"])
+        explanation = explain_matchup(db, team_a["teamId"], team_b["teamId"])
+
+        # Determine favorite/underdog
+        if prob_a >= 0.5:
+            favorite, underdog = team_a, team_b
+            fav_prob = prob_a
+        else:
+            favorite, underdog = team_b, team_a
+            fav_prob = 1 - prob_a
+
+        underdog_prob = 1 - fav_prob
+
+        if strategy == "chalk":
+            winner = favorite
+        elif strategy == "chaos":
+            winner = underdog if underdog_prob >= 0.30 else favorite
+        else:  # balanced
+            # Flip ~30% of games where underdog has >35% chance
+            if underdog_prob >= 0.35 and random.random() < 0.30:
+                winner = underdog
+            else:
+                winner = favorite
+
+        win_prob = prob_a if winner == team_a else 1 - prob_a
+        return winner, win_prob, explanation
+
+    bracket_results = {}
+    final_four_teams = []
+
+    for region_name, teams in regions.items():
+        # Sort by seed
+        team_by_seed = {t["seed"]: t for t in teams}
+
+        # Round of 64
+        r64_winners = []
+        r64_games = []
+        for s1, s2 in SEED_MATCHUPS:
+            t1 = team_by_seed.get(s1)
+            t2 = team_by_seed.get(s2)
+            if not t1 or not t2:
+                # If missing a team, advance the one we have
+                winner = t1 or t2
+                if winner:
+                    r64_winners.append(winner)
+                    r64_games.append({
+                        "matchup": f"#{winner['seed']} {winner['name']} (BYE)",
+                        "winner": winner["name"],
+                        "prob": "100%",
+                    })
+                continue
+            winner, prob, expl = pick_winner(t1, t2)
+            r64_winners.append(winner)
+            r64_games.append({
+                "matchup": f"#{t1['seed']} {t1['name']} vs #{t2['seed']} {t2['name']}",
+                "winner": f"#{winner['seed']} {winner['name']}",
+                "prob": f"{prob * 100:.0f}%",
+                "explanation": expl,
+            })
+
+        # Round of 32
+        r32_winners = []
+        r32_games = []
+        for i in range(0, len(r64_winners), 2):
+            if i + 1 >= len(r64_winners):
+                r32_winners.append(r64_winners[i])
+                continue
+            t1, t2 = r64_winners[i], r64_winners[i + 1]
+            winner, prob, expl = pick_winner(t1, t2)
+            r32_winners.append(winner)
+            r32_games.append({
+                "matchup": f"#{t1['seed']} {t1['name']} vs #{t2['seed']} {t2['name']}",
+                "winner": f"#{winner['seed']} {winner['name']}",
+                "prob": f"{prob * 100:.0f}%",
+                "explanation": expl,
+            })
+
+        # Sweet 16
+        s16_winners = []
+        s16_games = []
+        for i in range(0, len(r32_winners), 2):
+            if i + 1 >= len(r32_winners):
+                s16_winners.append(r32_winners[i])
+                continue
+            t1, t2 = r32_winners[i], r32_winners[i + 1]
+            winner, prob, expl = pick_winner(t1, t2)
+            s16_winners.append(winner)
+            s16_games.append({
+                "matchup": f"#{t1['seed']} {t1['name']} vs #{t2['seed']} {t2['name']}",
+                "winner": f"#{winner['seed']} {winner['name']}",
+                "prob": f"{prob * 100:.0f}%",
+                "explanation": expl,
+            })
+
+        # Elite 8
+        e8_games = []
+        if len(s16_winners) >= 2:
+            t1, t2 = s16_winners[0], s16_winners[1]
+            winner, prob, expl = pick_winner(t1, t2)
+            final_four_teams.append(winner)
+            e8_games.append({
+                "matchup": f"#{t1['seed']} {t1['name']} vs #{t2['seed']} {t2['name']}",
+                "winner": f"#{winner['seed']} {winner['name']}",
+                "prob": f"{prob * 100:.0f}%",
+                "explanation": expl,
+            })
+        elif s16_winners:
+            final_four_teams.append(s16_winners[0])
+
+        bracket_results[region_name] = {
+            "roundOf64": r64_games,
+            "roundOf32": r32_games,
+            "sweet16": s16_games,
+            "elite8": e8_games,
+            "regionChampion": final_four_teams[-1]["name"] if final_four_teams else None,
+        }
+
+    # Final Four
+    ff_games = []
+    ff_winners = []
+    for i in range(0, len(final_four_teams), 2):
+        if i + 1 >= len(final_four_teams):
+            ff_winners.append(final_four_teams[i])
+            continue
+        t1, t2 = final_four_teams[i], final_four_teams[i + 1]
+        winner, prob, expl = pick_winner(t1, t2)
+        ff_winners.append(winner)
+        ff_games.append({
+            "matchup": f"#{t1['seed']} {t1['name']} vs #{t2['seed']} {t2['name']}",
+            "winner": f"#{winner['seed']} {winner['name']}",
+            "prob": f"{prob * 100:.0f}%",
+            "explanation": expl,
+        })
+
+    # Championship
+    champ_game = None
+    champion = None
+    if len(ff_winners) >= 2:
+        t1, t2 = ff_winners[0], ff_winners[1]
+        winner, prob, expl = pick_winner(t1, t2)
+        champion = winner
+        champ_game = {
+            "matchup": f"#{t1['seed']} {t1['name']} vs #{t2['seed']} {t2['name']}",
+            "winner": f"#{winner['seed']} {winner['name']}",
+            "prob": f"{prob * 100:.0f}%",
+            "explanation": expl,
+        }
+    elif ff_winners:
+        champion = ff_winners[0]
+
+    return {
+        "strategy": strategy,
+        "gender": "Men's" if gender == "M" else "Women's",
+        "regions": bracket_results,
+        "finalFour": {
+            "games": ff_games,
+            "teams": [f"#{t['seed']} {t['name']}" for t in final_four_teams],
+        },
+        "championship": champ_game,
+        "champion": f"#{champion['seed']} {champion['name']}" if champion else None,
+        "totalGames": sum(
+            len(r["roundOf64"]) + len(r["roundOf32"]) + len(r["sweet16"]) + len(r["elite8"])
+            for r in bracket_results.values()
+        ) + len(ff_games) + (1 if champ_game else 0),
+    }
+
+
 # Tool dispatch
 TOOL_DISPATCH = {
     "lookup_team": _exec_lookup_team,
@@ -555,6 +809,7 @@ TOOL_DISPATCH = {
     "get_top_teams": _exec_get_top_teams,
     "get_todays_scores": _exec_get_scores,
     "get_upset_candidates": _exec_get_upset_candidates,
+    "build_bracket": _exec_build_bracket,
 }
 
 
@@ -574,7 +829,7 @@ def _execute_tool(db: Session, gender: str, tool_name: str, tool_input: dict) ->
 
 SYSTEM_PROMPT = """You are the Ubunifu Madness bracket advisor — an AI assistant for NCAA March Madness predictions built by Richard Pallangyo.
 
-You have tools to look up any D1 team, get head-to-head predictions, analyze conferences, check rankings, pull live scores, and find upset candidates.
+You have tools to look up any D1 team, get head-to-head predictions, analyze conferences, check rankings, pull live scores, find upset candidates, and build a complete tournament bracket.
 
 WHEN TO USE TOOLS vs. NOT:
 - Use tools when the user asks about specific teams, matchups, conferences, scores, or rankings.
@@ -585,16 +840,17 @@ WHEN TO USE TOOLS vs. NOT:
 ABOUT UBUNIFU MADNESS (answer from this when users ask about the app):
 - Built by Richard Pallangyo for the Kaggle March ML Mania 2026 competition.
 
-PREDICTION SYSTEM — BLENDED 6-SIGNAL MODEL:
-Live predictions use a blended approach that combines 6 signals, not just the static model:
-1. Static Model (30%): LR + LightGBM ensemble trained on 4,302 tournament games (1985-2025) with 31 features. Brier score 0.1413.
-2. Elo (30%): Real-time Elo ratings updated daily from ESPN. K=21.8, home advantage=101.9 points. Between seasons, ratings regress 11% toward 1500.
-3. Momentum (15%): Last 10 games win percentage and margin of victory. Captures hot/cold streaks.
-4. Conference Strength (10%): 70% conference average Elo probability + 30% non-conference win rate differential. Accounts for quality of competition.
-5. SOS-Adjusted Record (10%): Win percentage adjusted for strength of schedule. A 25-5 record against tough opponents matters more than 25-5 against weak ones. Formula: adj_wp = win_pct + (sos - 1500) / 2000.
-6. Efficiency (5%): Offensive and defensive points per 100 possessions differential.
+PREDICTION SYSTEM — BLENDED 7-SIGNAL MODEL:
+Live predictions use a blended approach that combines 7 signals, not just the static model:
+1. Static Model (28%): LR (37.8%) + LightGBM (62.2%) ensemble trained on modern-era games (2012-2025) with 28 features. CV Brier score 0.1543.
+2. Elo (25%): Real-time Elo ratings updated daily from ESPN. K=19.6, home advantage=90.9 points. Between seasons, ratings regress 5% toward 1500.
+3. Advanced Analytics (15%): Opponent-adjusted efficiency margin (AdjEM) with luck regression. Penalizes teams whose record outpaces underlying quality. Updates daily.
+4. Momentum (12%): Last 10 games win percentage and margin of victory. Captures hot/cold streaks.
+5. SOS-Adjusted Record (10%): Win percentage adjusted for strength of schedule. A 25-5 record against tough opponents matters more than 25-5 against weak ones.
+6. Conference Strength (8%): 70% conference average Elo probability + 30% non-conference win rate differential. Accounts for quality of competition.
+7. Efficiency (2%): Offensive and defensive points per 100 possessions differential.
 
-When the static model isn't available for a team, the remaining 5 signals are re-weighted (source: "live_blend"). This ensures every team gets a data-driven prediction.
+When the static model isn't available for a team, the remaining 6 signals are re-weighted (source: "live_blend"). This ensures every team gets a data-driven prediction.
 
 TOSSUP HANDLING:
 - When model confidence is below 55% (neither team favored above 55%), the game is labeled a "TOSSUP."
@@ -664,7 +920,7 @@ def chat(req: ChatRequest, request: Request, db: Session = Depends(get_db)):
 
     def generate():
         current_messages = list(messages)
-        max_tool_rounds = 3
+        max_tool_rounds = 4
 
         for _ in range(max_tool_rounds):
             # Non-streaming call that may include tool use

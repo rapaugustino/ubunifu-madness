@@ -6,6 +6,8 @@ from app.models import (
     Team, EloRating, TourneySeed, TeamConference,
     TeamSeasonStats, Prediction, ConferenceStrength, Conference,
 )
+from app.services.predictor import explain_matchup
+from app.services.style_analysis import analyze_style_matchup
 
 router = APIRouter(tags=["compare"])
 
@@ -157,10 +159,15 @@ def compare_teams(
                 "lowerBetter": lower_better,
             })
 
+    explanation = explain_matchup(db, team_a_id, team_b_id)
+    style_analysis = analyze_style_matchup(db, team_a_id, team_b_id)
+
     return {
         "teamA": detail_a,
         "teamB": detail_b,
         "winProbA": round(win_prob_a, 4),
         "winProbB": round(1 - win_prob_a, 4),
         "featureComparison": feature_comp,
+        "explanation": explanation,
+        "styleAnalysis": style_analysis,
     }

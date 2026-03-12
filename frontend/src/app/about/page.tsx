@@ -75,24 +75,25 @@ export default function AboutPage() {
 
       {/* Blended Prediction System */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold mb-3">Blended 6-Signal Prediction System</h2>
+        <h2 className="text-xl font-semibold mb-3">Blended 7-Signal Prediction System</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            Live predictions combine six independent signals into a single win probability.
+            Live predictions combine seven independent signals into a single win probability.
             This blended approach outperforms any single signal alone, because each captures
             a different dimension of team quality:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
-            <li><strong>Static Model (30%):</strong> LR + LightGBM ensemble trained on 4,302 tournament games (1985–2025) with 31 features. Brier score 0.1413.</li>
-            <li><strong>Elo Ratings (30%):</strong> Real-time ratings updated daily from ESPN results. Captures current team strength.</li>
-            <li><strong>Momentum (15%):</strong> Last 10 games win percentage and margin of victory. Catches hot/cold streaks.</li>
-            <li><strong>Conference Strength (10%):</strong> 70% conference avg Elo + 30% non-conference win rate. Accounts for quality of competition.</li>
+            <li><strong>Static Model (28%):</strong> LR + LightGBM ensemble trained on 2012–2025 modern-era games with 28 features. Brier score 0.1543.</li>
+            <li><strong>Elo Ratings (25%):</strong> Real-time ratings updated daily from ESPN results. Captures current team strength.</li>
+            <li><strong>Advanced Analytics (15%):</strong> Opponent-adjusted efficiency margin (AdjEM) with luck regression — penalizes teams whose record outpaces underlying quality.</li>
+            <li><strong>Momentum (12%):</strong> Last 10 games win percentage and margin of victory. Catches hot/cold streaks.</li>
             <li><strong>SOS-Adjusted Record (10%):</strong> Win percentage adjusted for strength of schedule — a 25-5 record against tough opponents is more impressive than 25-5 against weak ones.</li>
-            <li><strong>Efficiency (5%):</strong> Offensive vs defensive points per 100 possessions. Measures scoring quality independent of pace.</li>
+            <li><strong>Conference Strength (8%):</strong> 70% conference avg Elo + 30% non-conference win rate. Accounts for quality of competition.</li>
+            <li><strong>Efficiency (2%):</strong> Offensive vs defensive points per 100 possessions. Measures scoring quality independent of pace.</li>
           </ul>
           <p>
             When the static model isn&apos;t available for a team (e.g., mid-majors with limited data),
-            the remaining five live signals are re-weighted automatically. This ensures every
+            the remaining six live signals are re-weighted automatically. This ensures every
             D1 team gets a data-driven prediction, not just teams with full Kaggle coverage.
           </p>
         </div>
@@ -123,9 +124,9 @@ export default function AboutPage() {
         <h2 className="text-xl font-semibold mb-3">Static Model Details</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            The static model (one of six blended signals) is an ensemble of Logistic Regression
-            and LightGBM. Each is trained on 4,302 men&apos;s and women&apos;s NCAA tournament
-            games from 1985–2025, using 31 features organized into seven categories:
+            The static model (one of seven blended signals) is an ensemble of Logistic Regression
+            and LightGBM. Each is trained on modern-era men&apos;s and women&apos;s NCAA tournament
+            games from 2012–2025, using 28 features organized into seven categories:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li><strong>Elo:</strong> Current rating, rating difference, expected win probability</li>
@@ -138,10 +139,9 @@ export default function AboutPage() {
             <li><strong>Experience:</strong> Coach tenure, seed (when available)</li>
           </ul>
           <p>
-            The ensemble weights are 76% LR + 24% LGB, with isotonic calibration applied.
+            The ensemble weights are 37.8% LR + 62.2% LGB, with smooth isotonic calibration applied.
             LR provides stable, well-calibrated probabilities while LGB captures non-linear
-            interactions. Together they achieve a Brier score of 0.1413, which is 43.5% better
-            than always picking the higher seed.
+            interactions. Together they achieve a CV Brier score of 0.1543 on the modern era.
           </p>
         </div>
       </section>
