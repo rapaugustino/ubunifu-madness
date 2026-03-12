@@ -1,6 +1,5 @@
 """Tests for chat rate limiting logic."""
 
-import time
 
 import pytest
 from fastapi import HTTPException

@@ -24,6 +24,7 @@ from app.models import (
     Team, EloRating, ConferenceStrength, TeamSeasonStats,
     TeamConference,
 )
+from app.services.advanced_stats import compute_advanced_stats
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "raw"
 
@@ -276,12 +277,12 @@ def compute_team_season_stats(session, elo_by_season):
             for _, row in tdf.iterrows():
                 s = int(row["Season"])
                 w = int(row["WTeamID"])
-                l = int(row["LTeamID"])
+                loser = int(row["LTeamID"])
                 tourney_team_seasons[s].add(w)
-                tourney_team_seasons[s].add(l)
+                tourney_team_seasons[s].add(loser)
                 tourney_win_counts[(s, w)] += 1
                 tourney_game_counts[(s, w)] += 1
-                tourney_game_counts[(s, l)] += 1
+                tourney_game_counts[(s, loser)] += 1
 
     # Load coaches (men's and women's if available)
     coach_lookup = {}
@@ -492,6 +493,13 @@ def main():
         store_elo_ratings(session, elo_by_season)
         compute_conference_strength(session, elo_by_season, all_results)
         compute_team_season_stats(session, elo_by_season)
+
+        # Advanced metrics (adjusted efficiency, luck, consistency, etc.)
+        print(f"Computing advanced stats for {TARGET_SEASON}...")
+        adv_count = compute_advanced_stats(session, TARGET_SEASON)
+        session.commit()
+        print(f"  {adv_count} teams updated with advanced metrics")
+
         print("\nAll computed stats stored successfully!")
     except Exception as e:
         session.rollback()

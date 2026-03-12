@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
+import { useGender } from "@/hooks/useGender";
 import { useSearchParams } from "next/navigation";
 import WinProbBar from "@/components/WinProbBar";
 import { ArrowLeftRight, Sparkles } from "lucide-react";
@@ -95,7 +96,7 @@ function CompareContent() {
     winnerScore: number; loserScore: number; winnerLoc: string; gameType: string; numOt: number;
   }>; count: number } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [gender, setGender] = useState<"M" | "W" | "all">("M");
+  const [gender, setGender] = useGender();
   const [analysisText, setAnalysisText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [initializedFromParams, setInitializedFromParams] = useState(false);

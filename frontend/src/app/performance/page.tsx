@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useGender } from "@/hooks/useGender";
 import { TrendingUp, Check, X, Activity, Target, BarChart3, Info } from "lucide-react";
 import { Tooltip } from "@/components/Tooltip";
 
@@ -90,7 +91,7 @@ function StatCard({ label, value, sub, icon: Icon, tooltip }: { label: string; v
 }
 
 export default function PerformancePage() {
-  const [gender, setGender] = useState<"M" | "W">("M");
+  const [gender, setGender] = useGender();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [daily, setDaily] = useState<DailyData[]>([]);
   const [calibration, setCalibration] = useState<CalibrationBin[]>([]);
@@ -215,11 +216,11 @@ export default function PerformancePage() {
               <div className="flex flex-wrap gap-4">
                 {Object.entries(summary!.bySource).map(([src, data]) => {
                   const label: Record<string, string> = {
-                    "model_v2": "Static Model",
+                    "ml_ensemble": "ML Ensemble (V3)",
                     "blended": "Blended (Elo + Model + Momentum + SOS)",
                     "live_blend": "Live Blend (Elo + Momentum + SOS)",
-                    "ml_ensemble": "ML Ensemble",
                     "elo_fallback": "Elo Only",
+                    "model_v2": "Static Model (legacy)",
                   };
                   return (
                   <div key={src} className="flex items-center gap-3">

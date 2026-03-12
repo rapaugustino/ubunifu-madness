@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal
 from scripts.update_elo_live import update_elo_from_espn, refresh_conference_strength
+from app.services.advanced_stats import compute_advanced_stats
 from app.services.player_sync import (
     ingest_date_box_scores,
     recompute_season_stats,
@@ -181,7 +182,17 @@ def run():
                 session.rollback()
                 print(f"[{gender_label}] SOS error: {e}")
 
-            # --- Stage 5: Reconcile records from ESPN ---
+            # --- Stage 5: Advanced stats (adjusted efficiency, luck, etc.) ---
+            try:
+                adv_count = compute_advanced_stats(session, SEASON, gender)
+                session.commit()
+                if adv_count > 0:
+                    print(f"[{gender_label}] Advanced stats for {adv_count} teams")
+            except Exception as e:
+                session.rollback()
+                print(f"[{gender_label}] Advanced stats error: {e}")
+
+            # --- Stage 6: Reconcile records from ESPN ---
             try:
                 rec_count = reconcile_records(session, gender)
                 session.commit()

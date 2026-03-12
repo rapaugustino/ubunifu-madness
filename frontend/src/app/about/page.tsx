@@ -22,7 +22,7 @@ export default function AboutPage() {
           <p>
             Between seasons, every team&apos;s rating regresses 11% toward 1500. This prevents
             ratings from inflating over time and accounts for roster turnover. Ratings update
-            daily from ESPN game results using the exact same formula used to process 40 years
+            daily from ESPN game results using the exact same formula used to process 41 years
             of historical games.
           </p>
           <p>
@@ -205,25 +205,86 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Coverage */}
+      {/* Advanced Analytics */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold mb-3">Men&apos;s and Women&apos;s Coverage</h2>
+        <h2 className="text-xl font-semibold mb-3">Advanced Analytics</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            Every feature works for both men&apos;s and women&apos;s basketball. Rankings,
-            conference strength, predictions, live scores, and the bracket builder all support
-            a gender toggle. The model is trained on tournament games from both tournaments.
-            Elo ratings are computed independently per gender using the same methodology.
+            Beyond Elo, the Power Rankings surface advanced metrics computed from every
+            game&apos;s box score data. Click any team row to see its full analytics profile.
+            All metrics update daily via our ESPN data pipeline.
+          </p>
+          <ul className="list-disc list-inside space-y-2 ml-2">
+            <li>
+              <strong>Adjusted Efficiency (AdjOE / AdjDE / AdjEM):</strong> Points per 100
+              possessions, iteratively adjusted for opponent strength. A team scoring 80 points
+              against an elite defense is more impressive than 80 against a weak one. AdjEM (net
+              margin) is the single best predictor of team quality. Inspired by the methodology
+              popularized by Ken Pomeroy.
+            </li>
+            <li>
+              <strong>Barthag:</strong> Win probability against an average D1 team on a neutral
+              court, derived from adjusted efficiency using a Pythagorean formula
+              (AdjOE<sup>11.5</sup> / (AdjOE<sup>11.5</sup> + AdjDE<sup>11.5</sup>)). More
+              intuitive than raw Elo — 0.95 means a team would beat 95% of D1 opponents. This
+              concept was introduced by T-Rank.
+            </li>
+            <li>
+              <strong>Luck:</strong> Actual win percentage minus Pythagorean expected win
+              percentage (based on total points scored vs. allowed). Positive luck means a team
+              is winning more close games than expected — a signal that performance may regress.
+              Our Pythagorean formula uses an exponent of 9, tuned for college basketball.
+            </li>
+            <li>
+              <strong>Floor / Ceiling:</strong> The 10th and 90th percentile of a team&apos;s
+              game-by-game net efficiency. This reveals the range of outcomes — a team with a high
+              ceiling but low floor is a classic March Madness dark horse. This metric is unique
+              to Ubunifu Madness.
+            </li>
+            <li>
+              <strong>Upset Vulnerability:</strong> A composite score (0–100) combining margin
+              volatility, luck, three-point reliance, and free throw shooting. Higher scores
+              indicate teams more prone to losing games they &quot;should&quot; win. This
+              original metric is exclusive to our platform.
+            </li>
+            <li>
+              <strong>True Shooting %:</strong> Overall scoring efficiency capturing 2-point
+              field goals, 3-pointers, and free throws in a single number:
+              PTS / (2 × (FGA + 0.44 × FTA)). More complete than eFG% alone.
+            </li>
+            <li>
+              <strong>Additional metrics:</strong> 3-point attempt rate (offensive style),
+              assist-to-turnover ratio (ball movement quality), defensive rebound % (second-chance
+              denial), steal % (perimeter pressure), block % (rim protection), close-game record
+              (clutch performance), and margin consistency (scoring variance).
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      {/* Coverage */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-3">Equal Coverage: Men&apos;s and Women&apos;s NCAA</h2>
+        <div className="text-sm text-muted leading-relaxed space-y-3">
+          <p>
+            Ubunifu Madness provides full-depth analytics for both men&apos;s and women&apos;s
+            basketball — same advanced metrics, same prediction model, same UI treatment. Most
+            bracket tools treat women&apos;s basketball as an afterthought or ignore it entirely.
+            We believe the women&apos;s tournament deserves the same analytical depth.
+          </p>
+          <p>
+            Every feature works across both tournaments: advanced power rankings, opponent-adjusted
+            efficiency, live scores, bracket builder, head-to-head comparisons, the AI agent, and
+            player stats. A persistent gender toggle in the navigation bar lets you switch seamlessly.
+            Your preference is remembered across pages and sessions.
           </p>
           <p>
             <strong>A note on Elo scales:</strong> Men&apos;s and women&apos;s Elo ratings
-            operate as independent pools. You may notice that top women&apos;s teams have
-            higher raw Elo numbers than top men&apos;s teams. This reflects the different
-            competitive dynamics in women&apos;s basketball (historically more dominant top
-            programs like UConn, South Carolina, Stanford). The raw numbers should only be
-            compared within the same gender — a women&apos;s Elo of 2300 and a men&apos;s
-            Elo of 2100 both indicate elite teams at the top of their respective pools.
-            Prediction quality is calibrated independently within each pool.
+            operate as independent pools. Top women&apos;s teams may have higher raw Elo numbers
+            than top men&apos;s teams — this reflects different competitive dynamics (historically
+            more dominant programs like UConn and South Carolina in women&apos;s basketball). The
+            raw numbers should only be compared within the same gender. Adjusted efficiency and all
+            other analytics are computed independently per gender.
           </p>
         </div>
       </section>
@@ -233,12 +294,12 @@ export default function AboutPage() {
         <h2 className="text-xl font-semibold mb-3">Known Limitations</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>No player-level data — our model operates at the team level</li>
             <li>No injury adjustments — a key player being out is not reflected in predictions</li>
-            <li>Four Factors stats are computed from Kaggle box score data (updated seasonally, not after each game)</li>
-            <li>Women&apos;s Massey ordinals are not available from Kaggle, reducing feature coverage for women&apos;s predictions</li>
-            <li>Early season ratings carry more uncertainty — Elo stabilizes after ~15 games</li>
+            <li>Predictions operate at team level — individual player matchups are not modeled</li>
+            <li>Women&apos;s Massey ordinals are not available from Kaggle, reducing feature coverage for women&apos;s static model</li>
+            <li>Early season ratings carry more uncertainty — Elo and adjusted efficiency stabilize after ~15 games</li>
             <li>Men&apos;s and women&apos;s Elo scales differ in magnitude — compare within gender only</li>
+            <li>Adjusted efficiency assumes all possessions are equally valuable (no late-game situation modeling)</li>
           </ul>
         </div>
       </section>

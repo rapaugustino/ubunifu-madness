@@ -104,6 +104,28 @@ def power_rankings(
             "confStrength": round(cs_map.get(conf_abbrev, 0), 3),
             "trend": trend,
             "trendAmount": trend_amount,
+            # Advanced metrics
+            "adjOE": stats.adj_off_eff if stats else None,
+            "adjDE": stats.adj_def_eff if stats else None,
+            "adjEM": stats.adj_net_eff if stats else None,
+            "barthag": stats.barthag if stats else None,
+            "luck": stats.luck if stats else None,
+            "trueShooting": stats.true_shooting_pct if stats else None,
+            "oppTrueShooting": stats.opp_true_shooting_pct if stats else None,
+            "threePtRate": stats.three_pt_rate if stats else None,
+            "astToRatio": stats.ast_to_ratio if stats else None,
+            "drbPct": stats.drb_pct if stats else None,
+            "stlPct": stats.stl_pct if stats else None,
+            "blkPct": stats.blk_pct if stats else None,
+            "marginStdev": stats.margin_stdev if stats else None,
+            "floorEff": stats.floor_eff if stats else None,
+            "ceilingEff": stats.ceiling_eff if stats else None,
+            "upsetVulnerability": stats.upset_vulnerability if stats else None,
+            "closeRecord": f"{stats.close_wins}-{stats.close_losses}" if stats and stats.close_wins is not None else None,
+            "closeWinPct": stats.close_game_win_pct if stats else None,
+            "pythWinPct": stats.pyth_win_pct if stats else None,
+            "tempo": stats.avg_tempo if stats else None,
+            "sos": stats.sos if stats else None,
         })
 
     return {"rankings": rankings, "total": total}
@@ -148,8 +170,30 @@ def conference_rankings(
         for r in db.query(Conference).all()
     }
 
+    # Aggregate advanced stats per conference from TeamSeasonStats
+    conf_adv_raw = (
+        db.query(
+            TeamConference.conf_abbrev,
+            func.avg(TeamSeasonStats.adj_net_eff),
+            func.avg(TeamSeasonStats.avg_tempo),
+            func.avg(TeamSeasonStats.true_shooting_pct),
+            func.avg(TeamSeasonStats.upset_vulnerability),
+            func.avg(TeamSeasonStats.barthag),
+        )
+        .join(Team, Team.id == TeamConference.team_id)
+        .join(TeamSeasonStats, (TeamSeasonStats.team_id == Team.id) & (TeamSeasonStats.season == season))
+        .filter(TeamConference.season == season, Team.gender == gender)
+        .group_by(TeamConference.conf_abbrev)
+        .all()
+    )
+    conf_adv = {
+        row[0]: {"adjEM": row[1], "tempo": row[2], "tsPct": row[3], "upsetVuln": row[4], "barthag": row[5]}
+        for row in conf_adv_raw
+    }
+
     conferences = []
     for i, cs in enumerate(rows):
+        adv = conf_adv.get(cs.conf_abbrev, {})
         conferences.append({
             "rank": i + 1,
             "name": conf_names.get(cs.conf_abbrev, cs.conf_abbrev),
@@ -160,6 +204,11 @@ def conference_rankings(
             "teams": team_counts.get(cs.conf_abbrev, 0),
             "tourneyBids": bid_counts.get(cs.conf_abbrev, 0),
             "top5Elo": round(cs.top5_elo, 1) if cs.top5_elo else 0,
+            "avgAdjEM": round(adv.get("adjEM") or 0, 1),
+            "avgTempo": round(adv.get("tempo") or 0, 1),
+            "avgTsPct": round((adv.get("tsPct") or 0) * 100, 1),
+            "avgUpsetVuln": round(adv.get("upsetVuln") or 0, 1),
+            "avgBarthag": round(adv.get("barthag") or 0, 3),
         })
 
     return {"conferences": conferences}

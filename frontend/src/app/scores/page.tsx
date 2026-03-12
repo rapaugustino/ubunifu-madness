@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useGender } from "@/hooks/useGender";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Tv, Clock, Activity, ArrowRight, RefreshCw, Check, X, Lock } from "lucide-react";
@@ -278,7 +279,7 @@ export default function ScoresPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [date, setDate] = useState(new Date());
-  const [gender, setGender] = useState<"M" | "W">("M");
+  const [gender, setGender] = useGender();
   const isInitial = useRef(true);
 
   const fetchScores = useCallback(async (background = false) => {

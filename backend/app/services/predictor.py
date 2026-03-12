@@ -35,21 +35,23 @@ SEASON = 2026
 
 # When static model prediction is available
 BLEND_WEIGHTS = {
-    "static_model": 0.30,   # Notebook-trained model prediction
-    "elo": 0.30,            # Current Elo probability (updated daily)
-    "efficiency": 0.05,     # Offensive/defensive efficiency gap
-    "momentum": 0.15,       # Recent form (last N games)
-    "conference": 0.10,     # Conference strength differential
-    "record": 0.10,         # Season win percentage
+    "static_model": 0.28,          # Notebook-trained model prediction
+    "elo": 0.25,                   # Current Elo probability (updated daily)
+    "advanced_analytics": 0.15,    # Opponent-adjusted efficiency + luck regression
+    "efficiency": 0.02,            # Raw offensive/defensive efficiency gap
+    "momentum": 0.12,              # Recent form (last N games)
+    "conference": 0.08,            # Conference strength differential
+    "record": 0.10,                # Season win percentage
 }
 
 # When only live signals are available (no static prediction)
 LIVE_ONLY_WEIGHTS = {
-    "elo": 0.35,
-    "efficiency": 0.15,
-    "momentum": 0.20,
-    "conference": 0.15,
-    "record": 0.15,
+    "elo": 0.28,
+    "advanced_analytics": 0.20,    # Opponent-adjusted efficiency + luck regression
+    "efficiency": 0.07,            # Raw offensive/defensive efficiency gap
+    "momentum": 0.18,              # Recent form (last N games)
+    "conference": 0.12,            # Conference strength differential
+    "record": 0.15,                # Season win percentage
 }
 
 
@@ -439,6 +441,35 @@ def _record_probability(db: Session, team_a_id: int, team_b_id: int) -> float | 
     return 1.0 / (1.0 + 10.0 ** (-wp_diff * 3.0))
 
 
+def _advanced_analytics_probability(db: Session, team_a_id: int, team_b_id: int) -> float | None:
+    """P(team_a wins) from opponent-adjusted efficiency margin (AdjEM) with luck regression.
+
+    AdjEM is the strongest single predictor of team quality — it measures
+    points per 100 possessions above/below average, adjusted for opponent
+    strength. Luck (actual W% - Pythagorean W%) is regressed toward zero
+    to penalize teams whose record exceeds their underlying quality.
+    """
+    stats_a = db.query(TeamSeasonStats).filter(TeamSeasonStats.season == SEASON, TeamSeasonStats.team_id == team_a_id).first()
+    stats_b = db.query(TeamSeasonStats).filter(TeamSeasonStats.season == SEASON, TeamSeasonStats.team_id == team_b_id).first()
+    if not stats_a or not stats_b:
+        return None
+    if stats_a.adj_net_eff is None or stats_b.adj_net_eff is None:
+        return None
+
+    adj_em_diff = stats_a.adj_net_eff - stats_b.adj_net_eff
+
+    # Luck regression: positive luck means overperforming (likely to regress)
+    # Each 0.05 luck penalizes ~0.5 AdjEM points
+    luck_a = stats_a.luck or 0.0
+    luck_b = stats_b.luck or 0.0
+    luck_adjustment = (luck_a - luck_b) * -10.0
+
+    effective_diff = adj_em_diff + luck_adjustment
+
+    # Convert to probability: ~10pt AdjEM gap → ~75% win probability
+    return 1.0 / (1.0 + 10.0 ** (-effective_diff / 12.0))
+
+
 # ---------------------------------------------------------------------------
 # Prediction (main entry point)
 # ---------------------------------------------------------------------------
@@ -519,6 +550,10 @@ def predict_matchup(
     rec_prob = _record_probability(db, team_a_id, team_b_id)
     if rec_prob is not None:
         signals["record"] = rec_prob
+
+    adv_prob = _advanced_analytics_probability(db, team_a_id, team_b_id)
+    if adv_prob is not None:
+        signals["advanced_analytics"] = adv_prob
 
     if not signals:
         # Absolute fallback: 50/50

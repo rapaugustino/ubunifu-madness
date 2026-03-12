@@ -11,11 +11,13 @@ import {
   LayoutDashboard,
   Radio,
   Users,
+  Award,
   BookOpen,
   Target,
   Menu,
   X,
 } from "lucide-react";
+import { useGender } from "@/hooks/useGender";
 
 const navGroups = [
   {
@@ -31,6 +33,7 @@ const navGroups = [
     label: "Tools",
     items: [
       { href: "/teams", label: "Teams", icon: Users },
+      { href: "/players", label: "Players", icon: Award },
       { href: "/compare", label: "Compare", icon: GitCompareArrows },
       { href: "/chat", label: "Madness Agent", icon: MessageSquare },
     ],
@@ -50,6 +53,7 @@ const navItems = navGroups.flatMap((g) => g.items);
 export default function Nav() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [gender, setGender] = useGender();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close mobile menu on route change
@@ -81,7 +85,7 @@ export default function Nav() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass" ref={menuRef}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="max-w-[90rem] mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* ---- Logo ---- */}
           <Link href="/" className="flex items-center gap-2">
@@ -94,7 +98,7 @@ export default function Nav() {
           </Link>
 
           {/* ---- Desktop nav (md+) ---- */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-0.5">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
@@ -102,17 +106,32 @@ export default function Nav() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-1 px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? "bg-accent/15 text-accent"
                       : "text-muted hover:text-foreground hover:bg-white/5"
                   }`}
                 >
-                  <Icon size={16} />
+                  <Icon size={14} />
                   <span>{item.label}</span>
                 </Link>
               );
             })}
+          </div>
+
+          {/* ---- Gender toggle ---- */}
+          <div className="flex gap-0.5 bg-card border border-card-border rounded-lg p-0.5">
+            {(["M", "W"] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGender(g)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  gender === g ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                }`}
+              >
+                {g === "M" ? "Men" : "Women"}
+              </button>
+            ))}
           </div>
 
           {/* ---- Hamburger button (mobile only) ---- */}
@@ -120,7 +139,7 @@ export default function Nav() {
             type="button"
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             onClick={() => setMobileOpen((prev) => !prev)}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-muted hover:text-foreground hover:bg-white/5 transition-colors"
+            className="lg:hidden flex items-center justify-center w-10 h-10 rounded-lg text-muted hover:text-foreground hover:bg-white/5 transition-colors"
           >
             {mobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -129,7 +148,7 @@ export default function Nav() {
 
       {/* ---- Mobile dropdown panel ---- */}
       <div
-        className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
+        className={`lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${
           mobileOpen ? "max-h-[80vh] opacity-100" : "max-h-0 opacity-0"
         }`}
       >

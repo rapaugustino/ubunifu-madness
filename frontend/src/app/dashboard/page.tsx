@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { TrendingUp, TrendingDown, Minus, Search, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
+import { useGender } from "@/hooks/useGender";
+import { TrendingUp, TrendingDown, Minus, Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -26,6 +27,27 @@ interface PowerRanking {
   confStrength: number;
   trend: "up" | "down" | "same";
   trendAmount: number;
+  adjOE: number | null;
+  adjDE: number | null;
+  adjEM: number | null;
+  barthag: number | null;
+  luck: number | null;
+  trueShooting: number | null;
+  oppTrueShooting: number | null;
+  threePtRate: number | null;
+  astToRatio: number | null;
+  drbPct: number | null;
+  stlPct: number | null;
+  blkPct: number | null;
+  marginStdev: number | null;
+  floorEff: number | null;
+  ceilingEff: number | null;
+  upsetVulnerability: number | null;
+  closeRecord: string | null;
+  closeWinPct: number | null;
+  pythWinPct: number | null;
+  tempo: number | null;
+  sos: number | null;
 }
 
 interface ConferenceRanking {
@@ -38,6 +60,43 @@ interface ConferenceRanking {
   teams: number;
   tourneyBids: number;
   top5Elo: number;
+  avgAdjEM: number;
+  avgTempo: number;
+  avgTsPct: number;
+  avgUpsetVuln: number;
+  avgBarthag: number;
+}
+
+type SortField = "rank" | "adjEM" | "adjOE" | "adjDE" | "barthag" | "luck" | "sos" | "upsetVulnerability" | "tempo";
+
+function fmt(val: number | null, digits = 1): string {
+  if (val == null) return "—";
+  return val.toFixed(digits);
+}
+
+function signedFmt(val: number | null, digits = 1): string {
+  if (val == null) return "—";
+  const s = val.toFixed(digits);
+  return val > 0 ? `+${s}` : s;
+}
+
+function pctFmt(val: number | null): string {
+  if (val == null) return "—";
+  return `${(val * 100).toFixed(1)}%`;
+}
+
+function luckColor(luck: number | null): string {
+  if (luck == null) return "text-muted";
+  if (luck > 0.03) return "text-green-400";
+  if (luck < -0.03) return "text-red-400";
+  return "text-muted";
+}
+
+function vulnColor(v: number | null): string {
+  if (v == null) return "text-muted";
+  if (v >= 60) return "text-red-400";
+  if (v >= 40) return "text-yellow-400";
+  return "text-green-400";
 }
 
 export default function DashboardPage() {
@@ -48,8 +107,11 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"teams" | "conferences">("teams");
-  const [gender, setGender] = useState<"M" | "W">("M");
+  const [gender, setGender] = useGender();
   const [page, setPage] = useState(1);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [sortField, setSortField] = useState<SortField>("rank");
+  const [sortAsc, setSortAsc] = useState(true);
   const perPage = 50;
 
   const fetchRankings = useCallback(async (background = false) => {
@@ -78,7 +140,6 @@ export default function DashboardPage() {
     fetchRankings(false);
   }, [fetchRankings]);
 
-  // Revalidate on window focus if data is >2 min old
   useEffect(() => {
     const onFocus = () => {
       if (lastUpdated && Date.now() - lastUpdated.getTime() > 120000) {
@@ -89,23 +150,63 @@ export default function DashboardPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [fetchRankings, lastUpdated]);
 
-  const filteredRankings = useMemo(() =>
-    rankings.filter(
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(field === "rank" || field === "adjDE");
+    }
+  };
+
+  const filteredRankings = useMemo(() => {
+    let filtered = rankings.filter(
       (r) =>
         r.team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         r.conference.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-    [rankings, searchQuery]
-  );
+    );
+
+    filtered = [...filtered].sort((a, b) => {
+      let aVal: number, bVal: number;
+      switch (sortField) {
+        case "rank": aVal = a.rank; bVal = b.rank; break;
+        case "adjEM": aVal = a.adjEM ?? -999; bVal = b.adjEM ?? -999; break;
+        case "adjOE": aVal = a.adjOE ?? -999; bVal = b.adjOE ?? -999; break;
+        case "adjDE": aVal = a.adjDE ?? 999; bVal = b.adjDE ?? 999; break;
+        case "barthag": aVal = a.barthag ?? -1; bVal = b.barthag ?? -1; break;
+        case "luck": aVal = a.luck ?? 0; bVal = b.luck ?? 0; break;
+        case "sos": aVal = a.sos ?? 0; bVal = b.sos ?? 0; break;
+        case "upsetVulnerability": aVal = a.upsetVulnerability ?? 0; bVal = b.upsetVulnerability ?? 0; break;
+        case "tempo": aVal = a.tempo ?? 0; bVal = b.tempo ?? 0; break;
+        default: aVal = a.rank; bVal = b.rank;
+      }
+      return sortAsc ? aVal - bVal : bVal - aVal;
+    });
+
+    return filtered;
+  }, [rankings, searchQuery, sortField, sortAsc]);
 
   const totalPages = Math.ceil(filteredRankings.length / perPage);
   const paginatedRankings = filteredRankings.slice((page - 1) * perPage, page * perPage);
 
-  // Reset to page 1 when search or gender changes
   useEffect(() => { setPage(1); }, [searchQuery, gender]);
 
+  const SortHeader = ({ field, label, tooltip, className = "" }: { field: SortField; label: string; tooltip: string; className?: string }) => (
+    <th
+      className={`text-right text-xs font-medium text-muted uppercase tracking-wider px-3 py-3 cursor-pointer select-none hover:text-foreground transition-colors ${className}`}
+      onClick={() => handleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1 justify-end">
+        <MetricLabel label={label} tooltip={tooltip} className="justify-end" />
+        {sortField === field && (
+          sortAsc ? <ChevronUp size={10} className="text-accent" /> : <ChevronDown size={10} className="text-accent" />
+        )}
+      </span>
+    </th>
+  );
+
   return (
-    <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen max-w-[90rem] mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-2">
@@ -115,7 +216,7 @@ export default function DashboardPage() {
             )}
           </div>
           <p className="text-muted text-sm mt-1">
-            Elo-based rankings with conference strength context
+            Advanced analytics with opponent-adjusted efficiency
             {lastUpdated && (
               <span className="ml-2 text-xs">
                 &middot; Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
@@ -183,97 +284,140 @@ export default function DashboardPage() {
           <table className="w-full">
             <thead>
               <tr className="bg-card border-b border-card-border">
-                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Rank</th>
-                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Team</th>
-                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden sm:table-cell">Conference</th>
-                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">
-                  <MetricLabel label="Elo" tooltip={METRIC_TOOLTIPS.elo} className="justify-end" />
-                </th>
-                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden md:table-cell">Record</th>
-                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden lg:table-cell">
-                  <MetricLabel label="NC Win %" tooltip={METRIC_TOOLTIPS.confNcWinRate} className="justify-end" />
-                </th>
-                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">
+                <SortHeader field="rank" label="#" tooltip="Overall rank by Elo rating" className="text-left !px-3 w-10" />
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-3 py-3">Team</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-3 py-3 hidden sm:table-cell">Conf</th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-3 py-3 hidden md:table-cell">Record</th>
+                <SortHeader field="adjEM" label="AdjEM" tooltip={METRIC_TOOLTIPS.adjEM} />
+                <SortHeader field="adjOE" label="AdjO" tooltip={METRIC_TOOLTIPS.adjOE} className="hidden lg:table-cell" />
+                <SortHeader field="adjDE" label="AdjD" tooltip={METRIC_TOOLTIPS.adjDE} className="hidden lg:table-cell" />
+                <SortHeader field="barthag" label="Barthag" tooltip={METRIC_TOOLTIPS.barthag} className="hidden xl:table-cell" />
+                <SortHeader field="luck" label="Luck" tooltip={METRIC_TOOLTIPS.luck} className="hidden xl:table-cell" />
+                <SortHeader field="sos" label="SOS" tooltip={METRIC_TOOLTIPS.sos} className="hidden xl:table-cell" />
+                <SortHeader field="tempo" label="Tempo" tooltip={METRIC_TOOLTIPS.tempo} className="hidden 2xl:table-cell" />
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-3 py-3">
                   <MetricLabel label="Trend" tooltip={METRIC_TOOLTIPS.trend} className="justify-end" />
                 </th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-3 py-3 w-8"></th>
               </tr>
             </thead>
             <tbody>
               {paginatedRankings.map((ranking) => (
-                <tr
-                  key={ranking.team.id}
-                  className="border-b border-card-border/50 hover:bg-white/[0.02] transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <span className="text-sm font-mono text-muted">{ranking.rank}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {ranking.team.logo ? (
-                        <img src={ranking.team.logo} alt="" className="w-8 h-8 object-contain shrink-0" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs text-muted">
-                          —
+                <Fragment key={ranking.team.id}>
+                  <tr
+                    className="border-b border-card-border/50 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                    onClick={() => setExpandedRow(expandedRow === ranking.team.id ? null : ranking.team.id)}
+                  >
+                    <td className="px-3 py-3">
+                      <span className="text-sm font-mono text-muted">{ranking.rank}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2.5">
+                        {ranking.team.logo ? (
+                          <img src={ranking.team.logo} alt="" className="w-7 h-7 object-contain shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-xs text-muted">—</div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            {ranking.team.seed && (
+                              <span className="text-xs text-accent font-medium">#{ranking.team.seed}</span>
+                            )}
+                            <span className="font-medium text-sm">{ranking.team.name}</span>
+                          </div>
+                          <div className="text-xs text-muted sm:hidden">{ranking.conference}</div>
                         </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          {ranking.team.seed && (
-                            <span className="text-xs text-accent font-medium">#{ranking.team.seed}</span>
-                          )}
-                          <span className="font-medium text-sm">{ranking.team.name}</span>
-                        </div>
-                        <div className="text-xs text-muted sm:hidden">{ranking.conference}</div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <span className="text-sm text-muted">{ranking.conference}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-sm font-mono font-semibold">{ranking.elo}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden md:table-cell">
-                    <span className="text-sm text-muted">{ranking.record}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden lg:table-cell">
-                    <div className="flex items-center justify-end gap-2">
-                      <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-accent rounded-full"
-                          style={{ width: `${ranking.confStrength * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-muted font-mono">
-                        {(ranking.confStrength * 100).toFixed(0)}
+                    </td>
+                    <td className="px-3 py-3 hidden sm:table-cell">
+                      <span className="text-xs text-muted">{ranking.conference}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden md:table-cell">
+                      <span className="text-sm text-muted">{ranking.record}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <span className="text-sm font-mono font-semibold">{signedFmt(ranking.adjEM)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden lg:table-cell">
+                      <span className="text-sm font-mono">{fmt(ranking.adjOE)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden lg:table-cell">
+                      <span className="text-sm font-mono">{fmt(ranking.adjDE)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden xl:table-cell">
+                      <span className="text-sm font-mono">{fmt(ranking.barthag, 3)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden xl:table-cell">
+                      <span className={`text-sm font-mono ${luckColor(ranking.luck)}`}>
+                        {signedFmt(ranking.luck, 3)}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {ranking.trend === "up" && (
-                        <>
-                          <TrendingUp size={14} className="text-green-400" />
-                          <span className="text-xs text-green-400">+{ranking.trendAmount}</span>
-                        </>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden xl:table-cell">
+                      <span className="text-sm font-mono">{fmt(ranking.sos, 0)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right hidden 2xl:table-cell">
+                      <span className="text-sm font-mono">{fmt(ranking.tempo, 1)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {ranking.trend === "up" && (
+                          <>
+                            <TrendingUp size={14} className="text-green-400" />
+                            <span className="text-xs text-green-400">+{ranking.trendAmount}</span>
+                          </>
+                        )}
+                        {ranking.trend === "down" && (
+                          <>
+                            <TrendingDown size={14} className="text-red-400" />
+                            <span className="text-xs text-red-400">-{ranking.trendAmount}</span>
+                          </>
+                        )}
+                        {ranking.trend === "same" && (
+                          <Minus size={14} className="text-muted" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {expandedRow === ranking.team.id ? (
+                        <ChevronUp size={14} className="text-muted" />
+                      ) : (
+                        <ChevronDown size={14} className="text-muted" />
                       )}
-                      {ranking.trend === "down" && (
-                        <>
-                          <TrendingDown size={14} className="text-red-400" />
-                          <span className="text-xs text-red-400">-{ranking.trendAmount}</span>
-                        </>
-                      )}
-                      {ranking.trend === "same" && (
-                        <Minus size={14} className="text-muted" />
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
+                  {expandedRow === ranking.team.id && (
+                    <tr key={`${ranking.team.id}-detail`} className="border-b border-card-border/50 bg-card/50">
+                      <td colSpan={13} className="px-4 py-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                          <StatCell label="Elo" value={fmt(ranking.elo, 0)} tooltip={METRIC_TOOLTIPS.elo} />
+                          <StatCell label="AdjEM" value={signedFmt(ranking.adjEM)} tooltip={METRIC_TOOLTIPS.adjEM} highlight />
+                          <StatCell label="AdjO" value={fmt(ranking.adjOE)} tooltip={METRIC_TOOLTIPS.adjOE} />
+                          <StatCell label="AdjD" value={fmt(ranking.adjDE)} tooltip={METRIC_TOOLTIPS.adjDE} />
+                          <StatCell label="Barthag" value={fmt(ranking.barthag, 3)} tooltip={METRIC_TOOLTIPS.barthag} />
+                          <StatCell label="Tempo" value={fmt(ranking.tempo, 1)} tooltip={METRIC_TOOLTIPS.tempo} />
+                          <StatCell label="SOS" value={fmt(ranking.sos, 0)} tooltip={METRIC_TOOLTIPS.sos} />
+                          <StatCell label="Luck" value={signedFmt(ranking.luck, 3)} tooltip={METRIC_TOOLTIPS.luck} valueClass={luckColor(ranking.luck)} />
+                          <StatCell label="True Shooting" value={pctFmt(ranking.trueShooting)} tooltip={METRIC_TOOLTIPS.trueShooting} />
+                          <StatCell label="Opp TS%" value={pctFmt(ranking.oppTrueShooting)} tooltip={METRIC_TOOLTIPS.oppTrueShooting} />
+                          <StatCell label="3PA Rate" value={pctFmt(ranking.threePtRate)} tooltip={METRIC_TOOLTIPS.threePtRate} />
+                          <StatCell label="AST:TO" value={fmt(ranking.astToRatio, 2)} tooltip={METRIC_TOOLTIPS.astToRatio} />
+                          <StatCell label="DRB%" value={pctFmt(ranking.drbPct)} tooltip={METRIC_TOOLTIPS.drbPct} />
+                          <StatCell label="STL%" value={fmt(ranking.stlPct)} tooltip={METRIC_TOOLTIPS.stlPct} />
+                          <StatCell label="BLK%" value={fmt(ranking.blkPct)} tooltip={METRIC_TOOLTIPS.blkPct} />
+                          <StatCell label="Close Games" value={ranking.closeRecord ?? "—"} tooltip={METRIC_TOOLTIPS.closeRecord} />
+                          <StatCell label="Consistency" value={fmt(ranking.marginStdev)} tooltip={METRIC_TOOLTIPS.marginStdev} />
+                          <StatCell label="Floor / Ceiling" value={`${signedFmt(ranking.floorEff)} / ${signedFmt(ranking.ceilingEff)}`} tooltip={METRIC_TOOLTIPS.floorCeiling} />
+                          <StatCell label="Upset Risk" value={fmt(ranking.upsetVulnerability)} tooltip={METRIC_TOOLTIPS.upsetVulnerability} valueClass={vulnColor(ranking.upsetVulnerability)} />
+                          <StatCell label="Pyth W%" value={pctFmt(ranking.pythWinPct)} tooltip={METRIC_TOOLTIPS.pythWinPct} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 bg-card border-t border-card-border">
               <span className="text-xs text-muted">
@@ -292,9 +436,7 @@ export default function DashboardPage() {
                     key={p}
                     onClick={() => setPage(p)}
                     className={`w-8 h-8 rounded-md text-xs font-medium transition-colors ${
-                      p === page
-                        ? "bg-accent text-white"
-                        : "text-muted hover:text-foreground hover:bg-white/5"
+                      p === page ? "bg-accent text-white" : "text-muted hover:text-foreground hover:bg-white/5"
                     }`}
                   >
                     {p}
@@ -332,50 +474,45 @@ export default function DashboardPage() {
                 <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden lg:table-cell">
                   <MetricLabel label="Parity" tooltip={METRIC_TOOLTIPS.confDepth} className="justify-end" />
                 </th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden xl:table-cell">
+                  <MetricLabel label="Avg AdjEM" tooltip="Average adjusted efficiency margin across all teams in the conference. Higher is better." className="justify-end" />
+                </th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 hidden xl:table-cell">
+                  <MetricLabel label="Avg Barthag" tooltip="Average probability of beating an average D1 team. Measures overall conference quality." className="justify-end" />
+                </th>
               </tr>
             </thead>
             <tbody>
               {conferences.map((conf) => {
-                // Invert depth (std dev) to parity: lower spread = more parity
-                // Normalize: 100 std dev = high parity, 250 std dev = low parity
                 const parity = Math.max(0, Math.min(1, (250 - conf.depth) / 150));
                 return (
                   <tr key={conf.abbrev} className="border-b border-card-border/50 hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="text-sm font-mono text-muted">{conf.rank}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-sm">{conf.name}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-mono font-semibold">{conf.avgElo}</span>
-                    </td>
+                    <td className="px-4 py-3"><span className="text-sm font-mono text-muted">{conf.rank}</span></td>
+                    <td className="px-4 py-3"><span className="font-medium text-sm">{conf.name}</span></td>
+                    <td className="px-4 py-3 text-right"><span className="text-sm font-mono font-semibold">{conf.avgElo}</span></td>
                     <td className="px-4 py-3 text-right hidden sm:table-cell">
-                      <span className="text-sm font-mono text-accent">
-                        {(conf.ncWinRate * 100).toFixed(1)}%
-                      </span>
+                      <span className="text-sm font-mono text-accent">{(conf.ncWinRate * 100).toFixed(1)}%</span>
                     </td>
-                    <td className="px-4 py-3 text-right hidden md:table-cell">
-                      <span className="text-sm text-muted">{conf.teams}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-semibold">{conf.tourneyBids}</span>
-                    </td>
+                    <td className="px-4 py-3 text-right hidden md:table-cell"><span className="text-sm text-muted">{conf.teams}</span></td>
+                    <td className="px-4 py-3 text-right"><span className="text-sm font-semibold">{conf.tourneyBids}</span></td>
                     <td className="px-4 py-3 text-right hidden lg:table-cell">
                       <span className="text-sm font-mono font-semibold">{conf.top5Elo}</span>
                     </td>
                     <td className="px-4 py-3 text-right hidden lg:table-cell">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-500 rounded-full"
-                            style={{ width: `${parity * 100}%` }}
-                          />
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${parity * 100}%` }} />
                         </div>
-                        <span className="text-xs text-muted font-mono">
-                          {(parity * 100).toFixed(0)}
-                        </span>
+                        <span className="text-xs text-muted font-mono">{(parity * 100).toFixed(0)}</span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden xl:table-cell">
+                      <span className={`text-sm font-mono font-semibold ${conf.avgAdjEM > 0 ? "text-emerald-400" : conf.avgAdjEM < 0 ? "text-red-400" : "text-muted"}`}>
+                        {conf.avgAdjEM > 0 ? "+" : ""}{conf.avgAdjEM.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden xl:table-cell">
+                      <span className="text-sm font-mono">{conf.avgBarthag.toFixed(3)}</span>
                     </td>
                   </tr>
                 );
@@ -384,6 +521,21 @@ export default function DashboardPage() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function StatCell({
+  label, value, tooltip, highlight, valueClass = "",
+}: {
+  label: string; value: string; tooltip: string; highlight?: boolean; valueClass?: string;
+}) {
+  return (
+    <div className="px-3 py-2 rounded-lg bg-card border border-card-border/50">
+      <MetricLabel label={label} tooltip={tooltip} className="text-[10px] text-muted uppercase tracking-wider mb-1" />
+      <div className={`text-sm font-mono ${highlight ? "font-bold text-accent" : valueClass || "text-foreground"}`}>
+        {value}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useGender } from "@/hooks/useGender";
 import { Send, Sparkles, Trophy, TrendingUp, AlertTriangle, Loader2 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -47,7 +48,7 @@ export default function ChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gender, setGender] = useState<"M" | "W">("M");
+  const [gender, setGender] = useGender();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

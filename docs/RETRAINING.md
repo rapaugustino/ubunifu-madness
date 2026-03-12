@@ -53,6 +53,7 @@ python3 -m scripts.compute_stats
 2. Computes Elo ratings for every team at end-of-season (snapshot_day=154)
 3. Calculates conference strength metrics (avg_elo, nc_winrate, tourney history)
 4. Computes team season stats for the current season (Four Factors, efficiency, Massey, momentum, coach, SOS)
+5. Runs `compute_advanced_stats()` which computes opponent-adjusted efficiency (AdjOE/AdjDE/AdjEM via 10-iteration algorithm), Barthag, Pythagorean win % and luck, consistency metrics (margin stdev, efficiency stdev), floor/ceiling (10th/90th percentile net efficiency), and upset vulnerability index for all teams
 
 **Output:**
 - `elo_ratings` table: ~15,000 rows (all teams, all seasons)
@@ -214,6 +215,7 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 3. Win/loss record updates
 4. Player stats refresh
 5. SOS (strength of schedule) recomputation
+6. Advanced stats recomputation (AdjOE/AdjDE/AdjEM, Barthag, luck, consistency, floor/ceiling, upset vulnerability)
 
 ## Troubleshooting
 

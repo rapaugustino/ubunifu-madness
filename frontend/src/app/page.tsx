@@ -8,6 +8,7 @@ import {
   Target,
   TrendingUp,
   Radio,
+  Award,
 } from "lucide-react";
 
 const features = [
@@ -47,6 +48,13 @@ const features = [
     href: "/chat",
   },
   {
+    icon: Award,
+    title: "Player Leaderboard",
+    description:
+      "Top performers across men's and women's NCAA — points, rebounds, assists, shooting splits, and player importance.",
+    href: "/players",
+  },
+  {
     icon: Target,
     title: "Performance Tracking",
     description:
@@ -56,10 +64,10 @@ const features = [
 ];
 
 const stats = [
-  { label: "Prediction Signals", value: "6", subtext: "Elo, model, momentum, conf, SOS, efficiency" },
-  { label: "Brier Score", value: "0.1413", subtext: "43.5% better than seed baseline" },
+  { label: "Prediction Signals", value: "7", subtext: "Elo, model, AdjEM, momentum, conf, SOS, efficiency" },
+  { label: "Brier Score", value: "0.1543", subtext: "V3 calibrated ensemble" },
   { label: "Training Games", value: "4,302", subtext: "Men's + Women's tournaments" },
-  { label: "Model Features", value: "31", subtext: "Elo, conf, box scores, Massey" },
+  { label: "Model Features", value: "28", subtext: "Elo, conf, box scores, Massey" },
 ];
 
 export default function Home() {
@@ -80,10 +88,10 @@ export default function Home() {
             </h1>
 
             <p className="text-xl text-muted mb-8 max-w-2xl mx-auto">
-              Six prediction signals blended in real time — Elo, ML model, momentum,
-              conference strength, schedule difficulty, and efficiency. Predictions
-              locked before tipoff, accuracy tracked transparently. An AI agent
-              that breaks down any matchup on demand.
+              Seven prediction signals blended in real time — Elo, ML model,
+              opponent-adjusted efficiency, momentum, conference strength, schedule
+              difficulty, and efficiency. Predictions locked before tipoff, accuracy
+              tracked transparently. An AI agent that breaks down any matchup on demand.
             </p>
 
             <div className="flex items-center justify-center gap-4">

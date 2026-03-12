@@ -29,6 +29,7 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 - **Locked predictions** — every prediction frozen before tipoff, never changed retroactively
 - **Conference strength as prediction signal** — avg Elo probability + NC win rate differential blended into predictions
 - **Comprehensive chat agent** — blended matchup predictions, live scores, tossup awareness, SOS and conference knowledge
+- **Advanced analytics dashboard** — KenPom-depth metrics (AdjOE/AdjDE/AdjEM, Barthag, luck, floor/ceiling, upset vulnerability) computed from game data and displayed in sortable, expandable power rankings
 
 ---
 
@@ -44,15 +45,6 @@ Injuries and transfers are the biggest blind spot. A star player being out can s
 - Build player importance scores (minutes played, usage rate)
 - Adjust team strength when key players are out
 - Even a simple "key player missing → lower team Elo by X" would help
-
-### Advanced Analytics Page
-KenPom-depth analytics in a modern, free interface.
-
-- Team radar charts (Four Factors visualization)
-- Elo history graphs (how a team's rating changed over the season)
-- Conference strength comparison charts
-- Historical tournament performance by seed
-- Side-by-side conference profiles
 
 ### Bracket Simulation Engine
 Run thousands of bracket simulations like BartTorvik's TourneyCast.

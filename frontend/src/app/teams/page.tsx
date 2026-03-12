@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useGender } from "@/hooks/useGender";
 import Link from "next/link";
 import { Search } from "lucide-react";
 
@@ -22,7 +23,7 @@ interface TeamItem {
 export default function TeamsPage() {
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [search, setSearch] = useState("");
-  const [gender, setGender] = useState<"M" | "W">("M");
+  const [gender, setGender] = useGender();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

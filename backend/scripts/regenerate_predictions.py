@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal
-from app.models import GamePrediction, Team, EloRating
+from app.models import GamePrediction, Team
 from app.services import espn
 from app.services.predictor import predict_matchup, reload_model_bundle
 
@@ -115,11 +115,6 @@ def main():
         espn_map = {}
         for t in db.query(Team).filter(Team.espn_id.isnot(None), Team.gender == gender).all():
             espn_map[t.espn_id] = t
-
-        elo_map = {
-            r.team_id: r.elo
-            for r in db.query(EloRating).filter(EloRating.season == SEASON).all()
-        }
 
         for date_str in all_dates:
             try:
@@ -218,12 +213,12 @@ def main():
     db.commit()
 
     print(f"\n{'='*60}")
-    print(f"DONE")
+    print("DONE")
     print(f"{'='*60}")
     print(f"Created:  {total_created} predictions")
     print(f"Resolved: {total_resolved} outcomes")
     print(f"Errors:   {total_errors}")
-    print(f"Source:   all predictions use current predictor (V3 ml_ensemble)")
+    print("Source:   all predictions use current predictor (V3 ml_ensemble)")
 
     db.close()
 

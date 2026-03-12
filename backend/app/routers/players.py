@@ -1,6 +1,7 @@
 """Player data endpoints — roster, stats, importance, injuries."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -14,6 +15,119 @@ from app.services.player_sync import (
 router = APIRouter(tags=["players"])
 
 SEASON = 2026
+
+# Leaderboard category → (sort column or expression, display label)
+_LEADERBOARD_CATEGORIES = {
+    "ppg", "rpg", "apg", "mpg",
+    "fg_pct", "fg3_pct", "ft_pct",
+    "spg", "bpg",
+    "importance_score",
+}
+
+
+@router.get("/players/leaderboard")
+def player_leaderboard(
+    gender: str = Query("M", pattern="^(M|W)$"),
+    category: str = Query("ppg"),
+    min_games: int = Query(10, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Top performers by statistical category for the season."""
+    if category not in _LEADERBOARD_CATEGORIES:
+        raise HTTPException(400, f"Invalid category. Choose from: {sorted(_LEADERBOARD_CATEGORIES)}")
+
+    # Computed per-game columns for steals and blocks
+    gp = PlayerSeasonStats.games_played
+    safe_gp = case((gp > 0, gp), else_=1)
+    spg_expr = PlayerSeasonStats.stl_total / safe_gp
+    bpg_expr = PlayerSeasonStats.blk_total / safe_gp
+
+    sort_map = {
+        "ppg": PlayerSeasonStats.ppg,
+        "rpg": PlayerSeasonStats.rpg,
+        "apg": PlayerSeasonStats.apg,
+        "mpg": PlayerSeasonStats.mpg,
+        "fg_pct": PlayerSeasonStats.fg_pct,
+        "fg3_pct": PlayerSeasonStats.fg3_pct,
+        "ft_pct": PlayerSeasonStats.ft_pct,
+        "spg": spg_expr,
+        "bpg": bpg_expr,
+        "importance_score": PlayerSeasonStats.importance_score,
+    }
+    sort_col = sort_map[category]
+
+    # Minimum attempt thresholds for percentage categories to avoid
+    # misleading leaders (e.g. 100% FG on 2 total attempts).
+    # ~3 attempts per game is standard for FG/3PT, ~2 for FT.
+    pct_attempt_filters = {
+        "fg_pct": PlayerSeasonStats.fga >= min_games * 3,
+        "fg3_pct": PlayerSeasonStats.fga3 >= min_games * 2,
+        "ft_pct": PlayerSeasonStats.fta >= min_games * 2,
+    }
+
+    base_q = (
+        db.query(PlayerSeasonStats, Player, Team)
+        .join(Player, PlayerSeasonStats.player_id == Player.id)
+        .join(Team, Player.team_id == Team.id)
+        .filter(
+            Player.gender == gender,
+            PlayerSeasonStats.season == SEASON,
+            PlayerSeasonStats.games_played >= min_games,
+            sort_col.isnot(None) if hasattr(sort_col, "isnot") else True,
+        )
+    )
+
+    # Apply attempt threshold for percentage categories
+    if category in pct_attempt_filters:
+        base_q = base_q.filter(pct_attempt_filters[category])
+
+    total = base_q.count()
+
+    rows = (
+        base_q
+        .order_by(sort_col.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    players = []
+    for i, (stats, player, team) in enumerate(rows):
+        gp_val = stats.games_played or 1
+        players.append({
+            "rank": offset + i + 1,
+            "playerId": player.id,
+            "name": player.name,
+            "position": player.position,
+            "headshot": player.headshot_url,
+            "teamId": team.id,
+            "teamName": team.name,
+            "teamLogo": team.logo_url,
+            "teamColor": team.color,
+            "gamesPlayed": stats.games_played,
+            "statValue": round(
+                (stats.stl_total / gp_val) if category == "spg"
+                else (stats.blk_total / gp_val) if category == "bpg"
+                else getattr(stats, category) or 0,
+                1 if category in ("ppg", "rpg", "apg", "mpg") else 3,
+            ),
+            "stats": {
+                "ppg": stats.ppg,
+                "rpg": stats.rpg,
+                "apg": stats.apg,
+                "mpg": stats.mpg,
+                "fgPct": stats.fg_pct,
+                "fg3Pct": stats.fg3_pct,
+                "ftPct": stats.ft_pct,
+                "spg": round((stats.stl_total or 0) / gp_val, 1),
+                "bpg": round((stats.blk_total or 0) / gp_val, 1),
+                "importanceScore": stats.importance_score,
+            },
+        })
+
+    return {"players": players, "total": total, "category": category, "gender": gender}
 
 
 @router.get("/players/{team_id}")

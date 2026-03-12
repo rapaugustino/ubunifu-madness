@@ -121,7 +121,7 @@ def main():
 
     # Summary
     print(f"\n{'='*90}")
-    print(f"SUMMARY")
+    print("SUMMARY")
     print(f"{'='*90}")
     print(f"Total games:       {total}")
     print(f"Tossups (<{TOSSUP_THRESHOLD:.0%}):   {tossups}")
@@ -132,12 +132,12 @@ def main():
     if total > 0:
         print(f"Overall accuracy:  {correct/total:.1%} (tossups included)")
 
-    print(f"\nPrediction sources:")
+    print("\nPrediction sources:")
     for src, count in sorted(sources.items(), key=lambda x: -x[1]):
         print(f"  {src:<14} {count:>4} games")
 
     if misses:
-        print(f"\nBIGGEST MISSES (confident but wrong):")
+        print("\nBIGGEST MISSES (confident but wrong):")
         misses.sort(key=lambda m: -m["confidence"])
         for m in misses[:15]:
             print(f"  {m['confidence']:>5.1%} conf — {m['winner']} beat {m['loser']} ({m['source']})")

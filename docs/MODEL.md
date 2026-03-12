@@ -58,6 +58,8 @@ graph LR
     B --> C[Elo Ratings]
     B --> D[Conference Strength]
     B --> E[Team Season Stats]
+    E --> N[compute_advanced_stats]
+    N --> O[Advanced Analytics]
     C --> F[Feature Engineering]
     D --> F
     E --> F
@@ -70,6 +72,7 @@ graph LR
     J --> L[upload_model_artifacts.py]
     K --> M[(PostgreSQL)]
     L --> M
+    O --> M
 ```
 
 ## Step 1: Elo Rating System
@@ -174,6 +177,106 @@ Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) take
 | `coach_tenure_diff` | Years coaching current team |
 | `conf_tourney_wins_diff` | Conference tournament wins |
 | `sos_diff` | Strength of schedule (avg opponent Elo) |
+
+## Advanced Analytics (Dashboard)
+
+The following metrics are computed by `compute_advanced_stats()` and displayed on the frontend power rankings dashboard. They are NOT currently used as model features but provide KenPom-depth analytics for users. These are candidates for inclusion as model features in a future V4 retraining.
+
+### Opponent-Adjusted Efficiency (AdjOE, AdjDE, AdjEM)
+
+Inspired by KenPom's methodology. Raw per-100-possession offensive and defensive efficiency are adjusted iteratively (10 iterations) by opponent strength:
+
+```
+For each iteration:
+  AdjOE_team = raw_OE_team × (national_avg_DE / avg_opponent_AdjDE)
+  AdjDE_team = raw_DE_team × (national_avg_OE / avg_opponent_AdjOE)
+  AdjEM = AdjOE - AdjDE
+```
+
+This ensures a team that plays a tough schedule gets credit for maintaining efficiency against strong defenses, and vice versa.
+
+### Barthag (Win Probability vs Average D1 Team)
+
+Borrowed from T-Rank/BartTorvik. Uses the Pythagorean formula with exponent 11.5:
+
+```
+Barthag = AdjOE^11.5 / (AdjOE^11.5 + AdjDE^11.5)
+```
+
+Represents the probability a team would beat the average D1 team on a neutral court. Elite teams approach 0.98+; average teams sit near 0.50.
+
+### Pythagorean Win % and Luck
+
+Expected win percentage derived from total points scored and allowed (exponent 9):
+
+```
+PythWin% = PtsScored^9 / (PtsScored^9 + PtsAllowed^9)
+Luck = ActualWin% - PythWin%
+```
+
+Positive luck means the team has won more games than their point differential suggests (often via close wins). Negative luck indicates the opposite. Luck tends to regress, making it a useful indicator of future performance.
+
+### Shooting Metrics
+
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| True Shooting % | `PTS / (2 × (FGA + 0.44 × FTA))` | Captures all scoring efficiency including FTs and 3s |
+| 3-Point Attempt Rate (3PAr) | `FGA3 / FGA` | Proportion of shots taken from 3; higher = more variance |
+| AST:TO Ratio | `AST / TO` | Ball security and offensive organization |
+
+### Defensive Metrics
+
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| DRB% | `DRB / (DRB + Opp_ORB)` | Defensive rebounding percentage |
+| STL% | `STL / Opp_Poss` | Steal rate per opponent possession |
+| BLK% | `BLK / Opp_FGA` | Block rate per opponent field goal attempt |
+
+### Consistency Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Margin Stdev | Standard deviation of game-by-game scoring margin. Lower = more consistent team. |
+| Offensive Efficiency Stdev | Standard deviation of game-level offensive efficiency. Lower = more predictable offense. |
+
+### Floor and Ceiling (Original to Ubunifu Madness)
+
+| Metric | Description |
+|--------|-------------|
+| Floor (10th percentile) | 10th percentile of game-level net efficiency. Represents the team's worst realistic performance. |
+| Ceiling (90th percentile) | 90th percentile of game-level net efficiency. Represents the team's peak performance. |
+
+Teams with a wide floor-ceiling gap are high-variance; teams with a narrow gap are predictable.
+
+### Upset Vulnerability Index (Exclusive to Platform)
+
+An original composite metric (0-100 scale) that identifies highly-ranked teams susceptible to tournament upsets:
+
+```
+UVI = weighted combination of:
+  - Margin stdev (inconsistency)
+  - Luck (positive luck = regression candidate)
+  - 3PAr (three-point dependency = high variance)
+  - FT% inverse (poor FT shooting hurts in close games)
+```
+
+Higher values indicate greater upset vulnerability. This metric is exclusive to Ubunifu Madness.
+
+### Close Game Performance
+
+| Metric | Description |
+|--------|-------------|
+| Close Record | W-L record in games decided by 5 or fewer points |
+| Close Win % | Win percentage in close games |
+
+### Other Dashboard Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Tempo | Possessions per game (pace of play) |
+| SOS | Strength of schedule (average opponent Elo) |
+
+> **Future:** These advanced metrics can be added as model features in V4 retraining once sufficient historical data is computed for backtesting.
 
 ## Step 3: Model Training
 

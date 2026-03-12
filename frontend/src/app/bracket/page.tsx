@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useGender } from "@/hooks/useGender";
 import { Sparkles, RefreshCw, Download, Trophy, X } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -307,7 +308,7 @@ function AnalysisPanel({
 export default function BracketPage() {
   const [bracket, setBracket] = useState<BracketData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [gender, setGender] = useState<"M" | "W">("M");
+  const [gender, setGender] = useGender();
   const [activeRegion, setActiveRegion] = useState("East");
   const [picks, setPicks] = useState<Record<string, number>>({});
   const [analysisMatchup, setAnalysisMatchup] = useState<Matchup | null>(null);
