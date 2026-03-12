@@ -15,7 +15,7 @@ class GameResult(Base):
     l_score = Column(Integer, nullable=False)
     w_loc = Column(String(1), nullable=True)  # H, A, N
     num_ot = Column(Integer, default=0)
-    game_type = Column(String(10), nullable=False)  # 'regular' or 'tourney'
+    game_type = Column(String(20), nullable=False)  # 'regular', 'conf_tourney', or 'tourney'
     gender = Column(String(1), nullable=False)  # 'M' or 'W'
 
     # Detailed stats (nullable — compact results don't have these)
