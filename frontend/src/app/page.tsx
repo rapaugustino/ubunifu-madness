@@ -36,7 +36,7 @@ const features = [
     icon: BarChart3,
     title: "Power Rankings",
     description:
-      "Elo-based power rankings for 700+ teams with conference strength, strength of schedule, and daily ESPN updates.",
+      "Composite power rankings for 700+ teams blending Elo, efficiency, win rate, SOS, momentum, and Barthag — updated daily from ESPN.",
     href: "/dashboard",
   },
   {
@@ -50,7 +50,7 @@ const features = [
     icon: MessageSquare,
     title: "Madness Agent",
     description:
-      "An AI assistant with 7 tools — powered by our prediction model. Look up teams, get matchup breakdowns, find upset picks.",
+      "An AI assistant with 6 tools — powered by our prediction model. Look up teams, get matchup breakdowns, find upset picks.",
     href: "/chat",
   },
   {
@@ -102,11 +102,12 @@ export default function Home() {
             </h1>
 
             <p className="text-xl text-muted mb-8 max-w-2xl mx-auto">
-              A machine learning system that predicts NCAA basketball outcomes.
-              Seven statistical signals — Elo ratings, a calibrated LR+LightGBM ensemble,
-              opponent-adjusted efficiency, momentum, conference strength, schedule
-              difficulty, and efficiency — blended into a single win probability.
-              Predictions locked before tipoff, accuracy tracked transparently.
+              A machine learning system that predicts NCAA basketball outcomes
+              — men&apos;s and women&apos;s. A calibrated LR+LightGBM ensemble
+              trained on 4,300+ tournament games, combined with Elo ratings and
+              win-loss records via backtest-optimized weights. Composite power
+              rankings blend six metrics. Predictions locked before tipoff,
+              accuracy tracked transparently.
             </p>
 
             <div className="flex items-center justify-center gap-4">
@@ -173,19 +174,19 @@ export default function Home() {
 
             {/* Model stats */}
             <div className="text-center">
-              <div className="text-3xl font-bold text-foreground">7</div>
-              <div className="text-sm font-medium text-foreground mt-1">Prediction Signals</div>
-              <div className="text-xs text-muted mt-0.5">Blended ensemble</div>
+              <div className="text-3xl font-bold text-foreground">6</div>
+              <div className="text-sm font-medium text-foreground mt-1">Ranking Signals</div>
+              <div className="text-xs text-muted mt-0.5">Power rating blend</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-foreground">28</div>
               <div className="text-sm font-medium text-foreground mt-1">Model Features</div>
-              <div className="text-xs text-muted mt-0.5">Elo, conf, box scores</div>
+              <div className="text-xs text-muted mt-0.5">LR + LightGBM ensemble</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-foreground">0.154</div>
               <div className="text-sm font-medium text-foreground mt-1">CV Brier Score</div>
-              <div className="text-xs text-muted mt-0.5">2012-2025 test set</div>
+              <div className="text-xs text-muted mt-0.5">2012–2025 test set</div>
             </div>
           </div>
         </div>
@@ -214,11 +215,12 @@ export default function Home() {
             <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mb-4">
               <Brain className="text-accent" size={20} />
             </div>
-            <h3 className="font-semibold text-lg mb-2">2. Seven-Signal Blend</h3>
+            <h3 className="font-semibold text-lg mb-2">2. Backtest-Optimized Predictions</h3>
             <p className="text-sm text-muted">
-              A calibrated LR+LightGBM ensemble trained on 4,302 tournament games,
-              blended with Elo, opponent-adjusted efficiency, momentum, conference
-              strength, SOS, and raw efficiency into a single probability.
+              A calibrated LR+LightGBM ensemble (28 features, 4,300+ games),
+              blended with Elo ratings and win-loss records using weights
+              optimized on 255 conference tournament games. Six metrics power
+              composite rankings.
             </p>
           </div>
 

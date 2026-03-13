@@ -100,6 +100,7 @@ def compute_advanced_stats(session, season: int, gender: str = None):
                 "def_eff": def_eff_w,
                 "net_eff": off_eff_w - def_eff_w,
                 "opp_id": game.l_team_id,
+                "poss": poss,
                 "has_box": True,
             })
             # Loser game record
@@ -109,6 +110,7 @@ def compute_advanced_stats(session, season: int, gender: str = None):
                 "def_eff": def_eff_l,
                 "net_eff": off_eff_l - def_eff_l,
                 "opp_id": game.w_team_id,
+                "poss": poss,
                 "has_box": True,
             })
 
@@ -150,14 +152,17 @@ def compute_advanced_stats(session, season: int, gender: str = None):
             tl["opp_fta"] += game.w_fta
             tl["games_with_box"] += 1
 
-        # --- Compute raw efficiency per team ---
+        # --- Compute raw efficiency per team (possession-weighted) ---
         raw_oe = {}  # team_id -> raw offensive efficiency
         raw_de = {}  # team_id -> raw defensive efficiency
         for tid, games_list in team_games.items():
             box_games = [g for g in games_list if g.get("has_box") and "off_eff" in g]
             if box_games:
-                raw_oe[tid] = np.mean([g["off_eff"] for g in box_games])
-                raw_de[tid] = np.mean([g["def_eff"] for g in box_games])
+                poss_arr = np.array([g["poss"] for g in box_games])
+                total_poss = poss_arr.sum()
+                if total_poss > 0:
+                    raw_oe[tid] = np.average([g["off_eff"] for g in box_games], weights=poss_arr)
+                    raw_de[tid] = np.average([g["def_eff"] for g in box_games], weights=poss_arr)
 
         if not raw_oe:
             continue
@@ -178,9 +183,10 @@ def compute_advanced_stats(session, season: int, gender: str = None):
                 if not box_games:
                     continue
 
-                # Adjust each game's efficiency by opponent strength
+                # Adjust each game's efficiency by opponent strength (possession-weighted)
                 adj_oe_games = []
                 adj_de_games = []
+                poss_weights = []
                 for gm in box_games:
                     opp = gm["opp_id"]
                     # Adjust offense: scale by (nat avg defense / opponent's defense)
@@ -189,9 +195,11 @@ def compute_advanced_stats(session, season: int, gender: str = None):
                     # Adjust defense: scale by (nat avg offense / opponent's offense)
                     opp_oe = adj_oe.get(opp, nat_avg_oe)
                     adj_de_games.append(gm["def_eff"] * (nat_avg_oe / max(opp_oe, 1)))
+                    poss_weights.append(gm["poss"])
 
-                new_adj_oe[tid] = np.mean(adj_oe_games)
-                new_adj_de[tid] = np.mean(adj_de_games)
+                poss_arr = np.array(poss_weights)
+                new_adj_oe[tid] = np.average(adj_oe_games, weights=poss_arr)
+                new_adj_de[tid] = np.average(adj_de_games, weights=poss_arr)
 
             adj_oe = new_adj_oe
             adj_de = new_adj_de
