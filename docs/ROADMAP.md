@@ -6,9 +6,9 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 
 ## Completed
 
-- Elo rating system with Optuna-tuned parameters (K=21.8, HOME_ADV=101.9)
-- LR + LightGBM ensemble model (Brier score: 0.1413)
-- 31-feature pipeline with isotonic calibration
+- Elo rating system with Optuna-tuned parameters (K=19.6, HOME_ADV=90.9)
+- V4 LR + LightGBM ensemble model (Val Brier: 0.137, 80% accuracy, 163K training games)
+- 40-feature pipeline with smooth isotonic calibration
 - Live ESPN scores integration with background refresh
 - AI Madness Agent chat with streaming responses and 6 tools
 - Interactive bracket visualization
@@ -21,9 +21,9 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 - Full-roster team rankings with pagination (all D1 teams)
 - Methodology / How It Works page with transparent documentation
 - Terms, disclaimers, and data attribution
-- **Blended 6-signal prediction system** (Elo 30%, Static Model 30%, Momentum 15%, Conference 10%, SOS-Adjusted Record 10%, Efficiency 5%)
-- **Live prediction recomputation** — predictions use real-time Elo, momentum, SOS, and conference strength (not just static notebook)
-- **Tossup handling** — games with <52% confidence labeled as TOSSUP, excluded from accuracy metrics
+- **V4 ML ensemble** — 40-feature LR+LGB model trained on 163K games (all game types), with game-context features eliminating manual compression
+- **Live prediction recomputation** — predictions built from live DB state (Elo, efficiency, rankings, quality wins)
+- **Tossup handling** — games with <55% confidence labeled as TOSSUP
 - **Strength of schedule (SOS)** — computed live from all season game results, refreshed daily
 - **Performance tracking page** — cumulative accuracy charts, daily breakdowns, calibration curves, paginated game log
 - **Locked predictions** — every prediction frozen before tipoff, never changed retroactively
@@ -36,7 +36,7 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 ## High Impact, Medium Effort
 
 ### ~~Live Prediction Recomputation~~ ✓ DONE
-Implemented via the blended 6-signal predictor. Predictions now use real-time Elo, momentum, SOS, conference strength, and efficiency — computed fresh for every matchup. The static model remains as one of six signals. Future: load LR + LGB model artifacts directly for even more accurate feature-based recomputation.
+Implemented via the V4 ML ensemble. Predictions use 40 features built from live DB state — Elo, adjusted efficiency, quality wins, game context, rankings, and more. The model builds features fresh for every matchup from the database.
 
 ### Player Impact Modeling
 Injuries and transfers are the biggest blind spot. A star player being out can swing a game 5-10 points.

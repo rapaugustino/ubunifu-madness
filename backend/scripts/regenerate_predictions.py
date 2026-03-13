@@ -1,9 +1,9 @@
-"""Delete old predictions from a cutoff date and regenerate them with the V3 model.
+"""Delete old predictions from a cutoff date and regenerate them with the current model.
 
 This script:
 1. Deletes GamePrediction records from the cutoff date onward
 2. Re-fetches each date's scores via the ESPN service
-3. Creates new locked predictions using the current predictor (V3 ml_ensemble)
+3. Creates new locked predictions using the current predictor (ml_ensemble)
 4. Resolves outcomes for completed games
 
 Usage:
@@ -161,7 +161,7 @@ def main():
 
                 is_conf_tourney = detected_type == "conf_tourney"
 
-                # Generate V3 prediction
+                # Generate prediction
                 try:
                     prob_away, source = predict_matchup(
                         db, away_kid, home_kid, is_conf_tourney=is_conf_tourney
@@ -218,7 +218,7 @@ def main():
     print(f"Created:  {total_created} predictions")
     print(f"Resolved: {total_resolved} outcomes")
     print(f"Errors:   {total_errors}")
-    print("Source:   all predictions use current predictor (V3 ml_ensemble)")
+    print("Source:   all predictions use current predictor (ml_ensemble)")
 
     db.close()
 

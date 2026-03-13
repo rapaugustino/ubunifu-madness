@@ -35,20 +35,28 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
 - **CV Brier:** 0.1607
 - **Issues:** Overconfident on conference tournament games, prediction clustering from isotonic step function, stale training data from pre-modern basketball era
 
-### V3 (Current — March 2026)
+### V3 (March 2026, Retired)
 
-- **Training data:** 2012-2025 (modern era only — 3pt revolution, transfer portal, NIL)
+- **Training data:** 2012-2025 tournament games only (~4,300 games)
 - **Ensemble:** 37.8% LR + 62.2% LGB (Optuna-optimized)
 - **CV Brier:** 0.1543 (calibrated)
-- **Stage 1 equivalent (2022-2025):** 0.1527
-- **Key improvements:**
-  - Optuna re-tuning of Elo and LGB on modern data
-  - Isotonic calibration fitted on 2018-2025 OOF predictions
-  - Smooth calibration via linear interpolation (fixes prediction clustering)
-  - Conference tournament compression (20% toward 0.5)
-  - Model artifact export for live deployment via `ModelArtifact` DB table
+- **28 features** across 7 categories
+- **Notebook:** `notebooks/Ubunifu_Madness_V3_Modern.ipynb`
 
-**Notebook:** `notebooks/Ubunifu_Madness_V3_Modern.ipynb`
+### V4 (Current — March 2026)
+
+- **Training data:** 2012-2025, ALL game types — regular season (153K), conf tourney (7.8K), NCAA tourney (1.7K) = **163,000+ games**
+- **Ensemble:** 37.8% LR + 62.2% LGB
+- **Val Brier:** 0.137, **Val Accuracy:** 80.0% (2023-2026 holdout)
+- **40 features** across 9 categories (12 new over V3)
+- **Key improvements over V3:**
+  - Trains on ALL game types, not just tournament (38x more data)
+  - Game-type context as features (`is_conf_tourney`, `is_ncaa_tourney`, `is_neutral_site`) — eliminates need for manual compression
+  - New features: adjusted efficiency margin, Barthag, quality win %, rest days, KenPom/NET/consensus rankings
+  - Raw win percentages as non-differenced features (LGB captures nonlinearities)
+  - Season-based CV: train on 2012-2022, validate on 2023-2026
+
+**Notebook:** `notebooks/generate_v4_notebook.py` (generates `Ubunifu_Madness_V4_executed.ipynb`)
 
 ## Pipeline Overview
 
@@ -107,7 +115,7 @@ The margin-of-victory (MOV) multiplier rewards dominant wins more, but is dampen
 new_elo = mean_elo + regression_factor * (old_elo - mean_elo)
 ```
 
-## Step 2: Feature Engineering (28 Features)
+## Step 2: Feature Engineering (40 Features in V4)
 
 Features are computed as **differences** between Team A and Team B (A - B), making the model symmetric.
 
@@ -178,9 +186,30 @@ Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) take
 | `conf_tourney_wins_diff` | Conference tournament wins |
 | `sos_diff` | Strength of schedule (avg opponent Elo) |
 
+### Category 8: Game Context (V4, 4 features)
+
+| Feature | Description |
+|---------|-------------|
+| `is_conf_tourney` | 1 if conference tournament game |
+| `is_ncaa_tourney` | 1 if NCAA tournament game |
+| `is_neutral_site` | 1 if neutral site |
+| `rest_days_diff` | Days since last game (A - B) |
+
+### Category 9: Quality & Rankings (V4, 5 features)
+
+| Feature | Description |
+|---------|-------------|
+| `kenpom_rank_diff` | KenPom ranking difference (from Massey Ordinals) |
+| `net_rank_diff` | NCAA NET ranking difference |
+| `consensus_rank_diff` | Median rank across all ranking systems |
+| `adj_eff_margin_diff` | Opponent-adjusted efficiency margin (AdjEM) |
+| `barthag_diff` | Win probability vs average team |
+| `quality_win_pct_diff` | Win % against top-50 Elo teams |
+| `win_pct_a`, `win_pct_b` | Raw win percentages (non-differenced for LGB nonlinearities) |
+
 ## Advanced Analytics (Dashboard)
 
-The following metrics are computed by `compute_advanced_stats()` and displayed on the frontend power rankings dashboard. They are NOT currently used as model features but provide KenPom-depth analytics for users. These are candidates for inclusion as model features in a future V4 retraining.
+The following metrics are computed by `compute_advanced_stats()` and displayed on the frontend power rankings dashboard. Since V4, AdjEM, Barthag, and quality win % are also used as model features.
 
 ### Opponent-Adjusted Efficiency (AdjOE, AdjDE, AdjEM)
 
@@ -276,7 +305,7 @@ Higher values indicate greater upset vulnerability. This metric is exclusive to 
 | Tempo | Possessions per game (pace of play) |
 | SOS | Strength of schedule (average opponent Elo) |
 
-> **Future:** These advanced metrics can be added as model features in V4 retraining once sufficient historical data is computed for backtesting.
+> **V4 Update:** AdjEM, Barthag, and quality win % are now V4 model features, alongside game context flags and external rankings.
 
 ## Step 3: Model Training
 
@@ -291,12 +320,12 @@ This is critical because:
 
 ### Models Evaluated
 
-| Model | V2 Brier | V3 Brier | Notes |
-|-------|----------|----------|-------|
-| Logistic Regression | 0.1651 | 0.1612 | Reliable baseline |
-| LightGBM | 0.1697 | 0.1589 | Improved with modern-era tuning |
-| Ensemble (pre-calibration) | 0.1646 | 0.1575 | LR+LGB weighted average |
-| **Ensemble (calibrated)** | **0.1607** | **0.1543** | After isotonic calibration |
+| Model | V2 Brier | V3 Brier | V4 Val Brier | Notes |
+|-------|----------|----------|-------------|-------|
+| Logistic Regression | 0.1651 | 0.1612 | — | Reliable baseline |
+| LightGBM | 0.1697 | 0.1589 | — | Improved with modern-era tuning |
+| Ensemble (pre-calibration) | 0.1646 | 0.1575 | — | LR+LGB weighted average |
+| **Ensemble (calibrated)** | **0.1607** | **0.1543** | **0.137** | V4: 163K games, 40 features |
 
 In V3, LightGBM significantly improved with Optuna-tuned hyperparameters on modern data, flipping from worse-than-LR to better-than-LR.
 
@@ -376,10 +405,9 @@ Games where the model's confidence is below 55% are classified as **tossups** an
 
 During the season, the predictor operates in a 3-layer cascade:
 
-1. **`ml_ensemble`** — V3 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. Highest quality.
-2. **`blended`** — If artifacts unavailable, blends static CSV predictions (30%) with live signals: Elo (30%), momentum (15%), conference (10%), record (10%), efficiency (5%).
-3. **`live_blend`** — If no static predictions, uses only live signals with reweighted proportions.
-4. **`no_data`** — Absolute fallback: 50%.
+1. **`ml_ensemble`** — V4 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. 40 features built from live DB state. Highest quality.
+2. **`blended`** / **`live_blend`** — Fallback if artifacts unavailable. Blends Elo (60%) + SOS-adjusted record (40%).
+3. **`no_data`** — Absolute fallback: 50%.
 
 Predictions are **locked before tipoff** via the `GamePrediction` table and never modified retroactively, enabling honest performance tracking.
 
@@ -413,17 +441,17 @@ After deploying V3 with smooth calibration on March 10, 2026:
 
 ## Interview Talking Points
 
-1. **Why retrain on modern data only (2012+)?** Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading. Models trained on 2003-2011 learn patterns (like dominant big men, program loyalty) that no longer apply.
+1. **Why retrain on modern data only (2012+)?** Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading.
 
-2. **How did you fix the calibration clustering?** Isotonic regression with limited training data (~900 games) creates a step function with only ~17 output levels. We use linear interpolation between step midpoints to produce smooth, continuous probabilities while preserving the calibrator's overall mapping. This is a known limitation of non-parametric calibration on small samples.
+2. **What changed in V4?** V3 only trained on ~4,300 tournament games. V4 trains on 163,000+ games across regular season, conference tournaments, and NCAA tournaments. Game-type context is a feature — the model learns that conference tournament games are less predictable without needing manual compression hacks.
 
-3. **Why compress conference tournament predictions?** The model was trained on NCAA tournament games (teams from different conferences meeting on neutral courts) but evaluated on conference tournament games (same-conference teams who've played each other 2-3 times that season). Familiarity reduces predictability — a 20% compression toward 0.5 accounts for this domain shift.
+3. **How did you fix the calibration clustering?** Isotonic regression with limited training data creates a step function. We use linear interpolation between step midpoints to produce smooth, continuous probabilities.
 
-4. **Why did LightGBM improve so much in V3?** V2's LGB was trained on 2003-2025 data including early seasons where basketball was fundamentally different. On modern data (2012+), LGB's ability to capture nonlinear interactions (seed × Elo, conference strength × momentum) becomes valuable because the patterns are more consistent. With Optuna tuning on the right data distribution, LGB went from being the weaker model to the dominant one (62% weight).
+4. **Why did LightGBM improve so much?** On modern data (2012+), LGB's ability to capture nonlinear interactions (seed × Elo, conference strength × momentum) becomes valuable. With Optuna tuning on the right data distribution, LGB went from the weaker model to the dominant one (62% weight).
 
-5. **What's the hardest part?** The train/deploy domain gap. The model trains on NCAA tournament games (~130/year) but predicts conference tournament games daily. These have different dynamics: familiarity effects, home-crowd advantages, auto-bid pressure. You have to engineer guardrails (compression, tossup threshold) rather than just trusting the model blindly.
+5. **What's new in V4's features?** Game context flags (is_conf_tourney, is_neutral_site), rest days between games, quality win percentage (vs top-50 Elo), adjusted efficiency margin, Barthag, and KenPom/NET/consensus rankings from Massey Ordinals.
 
-6. **How does it compare to Vegas?** Our V3 CV Brier of 0.1543 is competitive. Vegas closing lines typically achieve ~0.14. The gap comes from injury reports, betting market information, and real-time lineup data that we don't have access to.
+6. **How does it compare to Vegas?** Our V4 validation Brier of 0.137 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have.
 
 ## Live Elo Updates
 

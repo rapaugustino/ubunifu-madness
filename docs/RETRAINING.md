@@ -62,39 +62,36 @@ python3 -m scripts.compute_stats
 
 **Time:** ~2 minutes
 
-## Step 3: Run the V3 Notebook
+## Step 3: Run the V4 Notebook
 
-Open and run the Jupyter notebook:
+Generate and run the V4 notebook:
 
 ```bash
 cd notebooks
-jupyter notebook Ubunifu_Madness_V3_Modern.ipynb
+python3 generate_v4_notebook.py  # Generates and executes the notebook
 ```
 
 The notebook runs in 7 parts:
 
-1. **Data loading** — Reads all CSVs, merges game results with seeds and features
-2. **Elo parameter tuning** — Optuna (60 trials) tunes K, home_adv, regression on modern data
-3. **Feature engineering** — Builds the 28-feature matrix for all 2012+ tournament matchups
-4. **Model training** — LOSO CV with LR + Optuna-tuned LightGBM, ensemble weight optimization, isotonic calibration on 2018+ OOF predictions
-5. **Evaluation** — Per-season Brier scores, calibration curves, feature importance
+1. **Data loading** — Reads all CSVs, merges game results with seeds, box scores, and Massey Ordinals
+2. **Elo computation** — Computes Elo ratings for all teams across all seasons
+3. **Feature engineering** — Builds the 40-feature matrix for ALL game types (regular + conf tourney + NCAA tourney) from 2012+
+4. **Model training** — Season-based CV (train 2012-2022, validate 2023-2026), LR + LightGBM ensemble with isotonic calibration
+5. **Evaluation** — Brier scores, accuracy, calibration curves, feature importance
 6. **Final training** — Train on all 2012-2025 data, generate Kaggle submission CSVs
-7. **Artifact export** — Save models to `artifacts/` directory (lr_v3.joblib, lgb_v3.joblib, calibrator_v3.joblib, model_metadata_v3.json)
+7. **Artifact export** — Save models to `artifacts/` directory (lr_v4.joblib, lgb_v4.joblib, calibrator_v4.joblib, model_metadata_v4.json)
 
-**Key configuration** (at the top of the notebook):
-```python
-MIN_TRAIN_SEASON = 2012  # Modern era only
-INCLUDE_CONF_TOURNEY = False  # Toggle: True for better live, False for pure tourney
-CALIBRATION_SEASONS = [2018, 2019, 2021, 2022, 2023, 2024, 2025]
-```
+**Key differences from V3:**
+- Trains on ALL game types (163K games vs V3's 4.3K tournament-only)
+- Game-type context as features (is_conf_tourney, is_ncaa_tourney, is_neutral_site)
+- New features: rest_days, kenpom_rank, net_rank, consensus_rank, adj_eff_margin, barthag, quality_win_pct
+- 40 features across 9 categories
 
 **Output:**
-- `submissions/stage1_submission_v3_modern.csv` — Stage 1 submission
-- `submissions/stage2_submission_v3_modern.csv` — Stage 2 submission
-- `artifacts/*.joblib` — Model artifacts for live deployment
-- `artifacts/model_metadata_v3.json` — Feature columns, weights, config
+- `artifacts/lr_v4.joblib`, `lgb_v4.joblib`, `calibrator_v4.joblib` — Model artifacts
+- `artifacts/model_metadata_v4.json` — Feature columns, weights, config
 
-**Time:** ~10-15 minutes (includes Optuna tuning)
+**Time:** ~10-15 minutes
 
 ## Step 4: Submit Predictions to Kaggle
 
@@ -112,11 +109,11 @@ kaggle competitions submit \
 
 ## Step 5: Upload Model Artifacts to Database
 
-This enables the live prediction pipeline to use the trained V3 models instead of falling back to signal blending.
+This enables the live prediction pipeline to use the trained models instead of falling back to signal blending.
 
 ```bash
 cd backend
-python3 -m scripts.upload_model_artifacts --version v3 --artifact-dir ../notebooks/artifacts/
+python3 -m scripts.upload_model_artifacts --version v4 --artifact-dir ../notebooks/artifacts/
 ```
 
 **What it does:**
@@ -131,7 +128,7 @@ python3 -m scripts.upload_model_artifacts --version v3 --artifact-dir ../noteboo
 
 ```bash
 cd backend
-python3 -m scripts.load_predictions ../submissions/stage2_submission_v3_modern.csv
+python3 -m scripts.load_predictions ../submissions/stage2_submission_v4.csv
 ```
 
 **What it does:**
@@ -225,5 +222,5 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 | Predictions all show same probability | Isotonic calibration clustering | V3 uses smooth calibration; ensure artifacts are uploaded |
 | ESPN 500 error on scores | `headline` field is None | Fixed in V3: `game.get("headline") or ""` |
 | ml_ensemble not used | Model artifacts not in DB | Run `upload_model_artifacts.py` and restart server |
-| Conference tourney overconfidence | Model trained on NCAA tourney | V3 applies 20% compression for conf tourney games |
+| Conference tourney overconfidence | Model trained on NCAA tourney only (V3) | V4 trains on all game types with is_conf_tourney feature |
 | Duplicate game results | Script ran twice before commit | Deduplication is built-in, safe to re-run |

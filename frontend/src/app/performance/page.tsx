@@ -209,16 +209,16 @@ export default function PerformancePage() {
             <div className="bg-card border border-card-border rounded-xl p-4">
               <div className="text-xs text-muted mb-3 flex items-center gap-2">
                 Accuracy by Prediction Source
-                <Tooltip text="Different prediction methods are used depending on data availability. ML Ensemble uses the trained V3 model. Live Blend combines Elo ratings, momentum, and strength of schedule when the full model can't run.">
+                <Tooltip text="Different prediction methods are used depending on data availability. ML Ensemble uses the trained V4 model (40 features). Live Blend uses Elo ratings and SOS-adjusted records as a fallback.">
                   <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
                 </Tooltip>
               </div>
               <div className="flex flex-wrap gap-4">
                 {Object.entries(summary!.bySource).map(([src, data]) => {
                   const label: Record<string, string> = {
-                    "ml_ensemble": "ML Ensemble (V3)",
-                    "blended": "Blended (Elo + Model + Momentum + SOS)",
-                    "live_blend": "Live Blend (Elo + Momentum + SOS)",
+                    "ml_ensemble": "ML Ensemble (V4)",
+                    "blended": "Blended (Elo + Record fallback)",
+                    "live_blend": "Live Blend (Elo + Record fallback)",
                     "elo_fallback": "Elo Only",
                     "model_v2": "Static Model (legacy)",
                   };

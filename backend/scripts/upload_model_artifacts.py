@@ -34,7 +34,7 @@ def main():
 
     if not artifact_dir.exists():
         print(f"Artifact directory not found: {artifact_dir}")
-        print("Run the V3 notebook first to generate artifacts.")
+        print("Run the notebook first to generate artifacts.")
         return
 
     # Load metadata

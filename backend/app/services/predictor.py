@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.models import (
     ModelArtifact, Prediction, EloRating, TeamSeasonStats,
     TourneySeed, TeamConference, ConferenceStrength, Team,
+    GameResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,13 @@ def load_model_bundle(db: Session) -> ModelBundle | None:
         return None
 
     feature_cols = metadata.get("feature_cols", [])
-    weights = metadata.get("weights", {"lr": 0.5, "lgb": 0.5})
+    # V3 uses {"weights": {"lr": ..., "lgb": ...}}, V4 uses "lr_weight"/"lgb_weight"
+    weights = metadata.get("weights")
+    if not weights:
+        weights = {
+            "lr": metadata.get("lr_weight", 0.5),
+            "lgb": metadata.get("lgb_weight", 0.5),
+        }
 
     _model_bundle = ModelBundle(lr, lgb, calibrator, feature_cols, weights)
     _model_loaded = True
@@ -181,15 +188,66 @@ def _safe_diff(a, b, default=0.0):
     return float(a) - float(b)
 
 
+def _compute_rest_days(db: Session, team_id: int) -> int:
+    """Days since team's last game. Returns 7 as default."""
+    last_game = (
+        db.query(GameResult.day_num)
+        .filter(
+            GameResult.season == SEASON,
+            (GameResult.w_team_id == team_id) | (GameResult.l_team_id == team_id),
+        )
+        .order_by(GameResult.day_num.desc())
+        .first()
+    )
+    if not last_game:
+        return 7
+
+    # Get second-to-last to compute gap
+    games = (
+        db.query(GameResult.day_num)
+        .filter(
+            GameResult.season == SEASON,
+            (GameResult.w_team_id == team_id) | (GameResult.l_team_id == team_id),
+        )
+        .order_by(GameResult.day_num.desc())
+        .limit(2)
+        .all()
+    )
+    if len(games) < 2:
+        return 7
+    return max(games[0][0] - games[1][0], 1)
+
+
+def _compute_quality_win_pct(db: Session, team_id: int, top_elos: set[int]) -> float:
+    """Win% against top-50 Elo teams. Returns 0.0 if no quality games."""
+    quality_wins = db.query(GameResult).filter(
+        GameResult.season == SEASON,
+        GameResult.w_team_id == team_id,
+        GameResult.l_team_id.in_(top_elos),
+    ).count()
+    quality_losses = db.query(GameResult).filter(
+        GameResult.season == SEASON,
+        GameResult.l_team_id == team_id,
+        GameResult.w_team_id.in_(top_elos),
+    ).count()
+    total = quality_wins + quality_losses
+    return quality_wins / total if total > 0 else 0.0
+
+
 def build_matchup_features(
     db: Session,
     team_a_id: int,
     team_b_id: int,
     feature_cols: list[str],
+    *,
+    is_conf_tourney: bool = False,
+    is_ncaa_tourney: bool = False,
+    is_neutral: bool = True,
 ) -> dict[str, float]:
     """Build feature vector for team_a vs team_b from current DB state.
 
     Feature names match the notebook's build_matchup_features_row() output.
+    Supports both V3 (28 features) and V4 (40 features).
     """
     # Load all data for both teams
     elo_a = db.query(EloRating).filter(EloRating.season == SEASON, EloRating.team_id == team_a_id).first()
@@ -212,7 +270,6 @@ def build_matchup_features(
     # Conference strength
     cs_a = cs_b = None
     if conf_a:
-        # Team already imported at module level
         team_obj = db.query(Team).filter(Team.id == team_a_id).first()
         gender = team_obj.gender if team_obj else "M"
         cs_a = db.query(ConferenceStrength).filter(
@@ -221,7 +278,6 @@ def build_matchup_features(
             ConferenceStrength.conf_abbrev == conf_a.conf_abbrev,
         ).first()
     if conf_b:
-        # Team already imported at module level
         team_obj = db.query(Team).filter(Team.id == team_b_id).first()
         gender = team_obj.gender if team_obj else "M"
         cs_b = db.query(ConferenceStrength).filter(
@@ -316,6 +372,63 @@ def build_matchup_features(
         stats_a.sos if stats_a else None,
         stats_b.sos if stats_b else None,
     )
+
+    # --- V4 features (game context + new signals) ---
+
+    # Game type flags
+    f["is_conf_tourney"] = 1.0 if is_conf_tourney else 0.0
+    f["is_ncaa_tourney"] = 1.0 if is_ncaa_tourney else 0.0
+    f["is_neutral_site"] = 1.0 if is_neutral else 0.0
+
+    # Rest days (days since each team's last game)
+    if "rest_days_diff" in feature_cols:
+        rest_a = _compute_rest_days(db, team_a_id)
+        rest_b = _compute_rest_days(db, team_b_id)
+        f["rest_days_diff"] = float(rest_a - rest_b)
+    else:
+        f["rest_days_diff"] = 0.0
+
+    # Ranking features from Massey Ordinals
+    # massey_avg_rank is our best proxy for consensus rank
+    # KenPom and NET aren't stored individually — use massey_avg_rank as fallback
+    rank_a = stats_a.massey_avg_rank if stats_a and stats_a.massey_avg_rank else 200.0
+    rank_b = stats_b.massey_avg_rank if stats_b and stats_b.massey_avg_rank else 200.0
+    f["kenpom_rank_diff"] = rank_a - rank_b
+    f["net_rank_diff"] = rank_a - rank_b
+    f["consensus_rank_diff"] = rank_a - rank_b
+
+    # Adjusted efficiency margin (from advanced_stats.py — already in DB)
+    f["adj_eff_margin_diff"] = _safe_diff(
+        stats_a.adj_net_eff if stats_a else None,
+        stats_b.adj_net_eff if stats_b else None,
+    )
+
+    # Barthag (win probability vs average team)
+    f["barthag_diff"] = _safe_diff(
+        stats_a.barthag if stats_a else None,
+        stats_b.barthag if stats_b else None,
+    )
+
+    # Quality win percentage (wins vs top-50 Elo teams)
+    if "quality_win_pct_diff" in feature_cols:
+        # Get top-50 Elo teams
+        top_elos = {
+            r.team_id for r in
+            db.query(EloRating.team_id)
+            .filter(EloRating.season == SEASON)
+            .order_by(EloRating.elo.desc())
+            .limit(50)
+            .all()
+        }
+        qw_a = _compute_quality_win_pct(db, team_a_id, top_elos)
+        qw_b = _compute_quality_win_pct(db, team_b_id, top_elos)
+        f["quality_win_pct_diff"] = qw_a - qw_b
+    else:
+        f["quality_win_pct_diff"] = 0.0
+
+    # Raw win percentages (non-differenced — LGB uses for nonlinearities)
+    f["win_pct_a"] = float(stats_a.win_pct) if stats_a and stats_a.win_pct is not None else 0.5
+    f["win_pct_b"] = float(stats_b.win_pct) if stats_b and stats_b.win_pct is not None else 0.5
 
     return f
 
@@ -494,12 +607,15 @@ def predict_matchup(
     team_a_id: int,
     team_b_id: int,
     is_conf_tourney: bool = False,
+    is_ncaa_tourney: bool = False,
+    is_neutral: bool = True,
 ) -> tuple[float, str]:
     """Predict P(team_a wins) by blending multiple signals.
 
     Args:
-        is_conf_tourney: If True, compress probability toward 0.5 to account
-            for conference tournament parity (same-conference familiarity).
+        is_conf_tourney: Conference tournament game flag.
+        is_ncaa_tourney: NCAA tournament game flag.
+        is_neutral: Neutral site flag (default True for tournament games).
 
     Returns (probability, source_label).
     """
@@ -507,7 +623,12 @@ def predict_matchup(
     bundle = load_model_bundle(db)
     if bundle and bundle.feature_cols:
         try:
-            features = build_matchup_features(db, team_a_id, team_b_id, bundle.feature_cols)
+            features = build_matchup_features(
+                db, team_a_id, team_b_id, bundle.feature_cols,
+                is_conf_tourney=is_conf_tourney,
+                is_ncaa_tourney=is_ncaa_tourney,
+                is_neutral=is_neutral,
+            )
             X = np.array([[features.get(c, 0.0) for c in bundle.feature_cols]])
 
             probs = []
@@ -529,8 +650,7 @@ def predict_matchup(
                     raw = _smooth_calibrate(bundle.calibrator, raw)
 
                 prob = float(np.clip(raw, 0.02, 0.98))
-                if is_conf_tourney:
-                    prob = 0.5 + (prob - 0.5) * CONF_TOURNEY_COMPRESSION
+                # V4 model has is_conf_tourney as a feature — no manual compression needed
                 return prob, "ml_ensemble"
         except Exception as e:
             logger.warning(f"ML prediction failed, falling back: {e}")
