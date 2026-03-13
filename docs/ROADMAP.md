@@ -7,7 +7,7 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 ## Completed
 
 - Elo rating system with Optuna-tuned parameters (K=19.6, HOME_ADV=90.9)
-- V4 LR + LightGBM ensemble model (Val Brier: 0.137, 80% accuracy, 163K training games)
+- V5 LR + LightGBM ensemble model (Val Brier: 0.137, 80% accuracy, 163K recency-weighted training games)
 - 40-feature pipeline with smooth isotonic calibration
 - Live ESPN scores integration with background refresh
 - AI Madness Agent chat with streaming responses and 6 tools
@@ -21,7 +21,7 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 - Full-roster team rankings with pagination (all D1 teams)
 - Methodology / How It Works page with transparent documentation
 - Terms, disclaimers, and data attribution
-- **V4 ML ensemble** — 40-feature LR+LGB model trained on 163K games (all game types), with game-context features eliminating manual compression
+- **V5 ML ensemble** — 40-feature LR+LGB model with recency-weighted training (5-season half-life), home court adjusted AdjEM, and feature-diff based explanations
 - **Live prediction recomputation** — predictions built from live DB state (Elo, efficiency, rankings, quality wins)
 - **Tossup handling** — games with <55% confidence labeled as TOSSUP
 - **Strength of schedule (SOS)** — computed live from all season game results, refreshed daily
@@ -73,10 +73,13 @@ The app works on desktop but several pages need mobile optimization.
 - Compare page: stack teams vertically on small screens
 - Dashboard table: responsive column hiding (already started)
 
-### Recency-Weighted Rankings
-KenPom treats a November game the same as a February game. BartTorvik weights recent games more. We should too.
+### ~~Recency-Weighted Rankings~~ ✓ DONE (V5)
+V5 model uses exponential decay with 5-season half-life for training weights. Recent games emphasized ~7x more than oldest training data.
 
-- Decay weight for games older than 40 days
+### Recency-Weighted Within-Season Rankings
+BartTorvik weights recent games more within a single season. Could add in-season decay for AdjEM computation.
+
+- Decay weight for games older than 40 days within the current season
 - Show "Recent Form" as a separate ranking alongside season-long Elo
 - Let users toggle between "Season" and "Last 30 Days" views
 

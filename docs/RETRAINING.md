@@ -53,7 +53,7 @@ python3 -m scripts.compute_stats
 2. Computes Elo ratings for every team at end-of-season (snapshot_day=154)
 3. Calculates conference strength metrics (avg_elo, nc_winrate, tourney history)
 4. Computes team season stats for the current season (Four Factors, efficiency, Massey, momentum, coach, SOS)
-5. Runs `compute_advanced_stats()` which computes opponent-adjusted efficiency (AdjOE/AdjDE/AdjEM via 10-iteration algorithm), Barthag, Pythagorean win % and luck, consistency metrics (margin stdev, efficiency stdev), floor/ceiling (10th/90th percentile net efficiency), and upset vulnerability index for all teams
+5. Runs `compute_advanced_stats()` which computes opponent-adjusted efficiency (AdjOE/AdjDE/AdjEM via 10-iteration algorithm with home court adjustment ±3.5), Barthag, Pythagorean win % and luck, consistency metrics (margin stdev, efficiency stdev), floor/ceiling (10th/90th percentile net efficiency), and upset vulnerability index for all teams
 
 **Output:**
 - `elo_ratings` table: ~15,000 rows (all teams, all seasons)
@@ -62,13 +62,13 @@ python3 -m scripts.compute_stats
 
 **Time:** ~2 minutes
 
-## Step 3: Run the V4 Notebook
+## Step 3: Run the V5 Notebook
 
-Generate and run the V4 notebook:
+Generate and run the V5 notebook:
 
 ```bash
 cd notebooks
-python3 generate_v4_notebook.py  # Generates and executes the notebook
+python3 generate_v4_notebook.py  # Generates and executes Ubunifu_Madness_V5.ipynb
 ```
 
 The notebook runs in 7 parts:
@@ -76,20 +76,18 @@ The notebook runs in 7 parts:
 1. **Data loading** — Reads all CSVs, merges game results with seeds, box scores, and Massey Ordinals
 2. **Elo computation** — Computes Elo ratings for all teams across all seasons
 3. **Feature engineering** — Builds the 40-feature matrix for ALL game types (regular + conf tourney + NCAA tourney) from 2012+
-4. **Model training** — Season-based CV (train 2012-2022, validate 2023-2026), LR + LightGBM ensemble with isotonic calibration
+4. **Model training** — Season-based CV (train 2012-2022, validate 2023-2026), LR + LightGBM ensemble with isotonic calibration. **Recency-weighted:** exponential decay with 5-season half-life applied to both LR and LGB training.
 5. **Evaluation** — Brier scores, accuracy, calibration curves, feature importance
-6. **Final training** — Train on all 2012-2025 data, generate Kaggle submission CSVs
-7. **Artifact export** — Save models to `artifacts/` directory (lr_v4.joblib, lgb_v4.joblib, calibrator_v4.joblib, model_metadata_v4.json)
+6. **Final training** — Train on all 2012-2025 data with recency weights, generate Kaggle submission CSVs
+7. **Artifact export** — Save models to `artifacts/` directory (lr_v5.joblib, lgb_v5.joblib, calibrator_v5.joblib, model_metadata_v5.json)
 
-**Key differences from V3:**
-- Trains on ALL game types (163K games vs V3's 4.3K tournament-only)
-- Game-type context as features (is_conf_tourney, is_ncaa_tourney, is_neutral_site)
-- New features: rest_days, kenpom_rank, net_rank, consensus_rank, adj_eff_margin, barthag, quality_win_pct
-- 40 features across 9 categories
+**Key differences from V4:**
+- Recency-weighted training: 5-season half-life exponential decay (2025 games weighted ~7x more than 2012)
+- Same 40 features — h2h was tested and rejected due to label leakage
 
 **Output:**
-- `artifacts/lr_v4.joblib`, `lgb_v4.joblib`, `calibrator_v4.joblib` — Model artifacts
-- `artifacts/model_metadata_v4.json` — Feature columns, weights, config
+- `artifacts/lr_v5.joblib`, `lgb_v5.joblib`, `calibrator_v5.joblib` — Model artifacts
+- `artifacts/model_metadata_v5.json` — Feature columns, weights, config
 
 **Time:** ~10-15 minutes
 
@@ -113,7 +111,7 @@ This enables the live prediction pipeline to use the trained models instead of f
 
 ```bash
 cd backend
-python3 -m scripts.upload_model_artifacts --version v4 --artifact-dir ../notebooks/artifacts/
+python3 -m scripts.upload_model_artifacts --version v5 --artifact-dir ../notebooks/artifacts/
 ```
 
 **What it does:**
@@ -128,7 +126,7 @@ python3 -m scripts.upload_model_artifacts --version v4 --artifact-dir ../noteboo
 
 ```bash
 cd backend
-python3 -m scripts.load_predictions ../submissions/stage2_submission_v4.csv
+python3 -m scripts.load_predictions ../submissions/stage2_submission_v5.csv
 ```
 
 **What it does:**
@@ -212,7 +210,9 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 3. Win/loss record updates
 4. Player stats refresh
 5. SOS (strength of schedule) recomputation
-6. Advanced stats recomputation (AdjOE/AdjDE/AdjEM, Barthag, luck, consistency, floor/ceiling, upset vulnerability)
+6. Advanced stats recomputation (AdjOE/AdjDE/AdjEM with home court adjustment, Barthag, luck, consistency, floor/ceiling, upset vulnerability)
+7. Power ratings recomputation (AdjEM 50%, Barthag 25%, SOS 10%, Elo 5%, Win% 5%, Momentum 5%)
+8. Lock predictions for upcoming games
 
 ## Troubleshooting
 
@@ -222,5 +222,5 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 | Predictions all show same probability | Isotonic calibration clustering | V3 uses smooth calibration; ensure artifacts are uploaded |
 | ESPN 500 error on scores | `headline` field is None | Fixed in V3: `game.get("headline") or ""` |
 | ml_ensemble not used | Model artifacts not in DB | Run `upload_model_artifacts.py` and restart server |
-| Conference tourney overconfidence | Model trained on NCAA tourney only (V3) | V4 trains on all game types with is_conf_tourney feature |
+| Conference tourney overconfidence | Model trained on NCAA tourney only (V3) | V4+ trains on all game types with is_conf_tourney feature |
 | Duplicate game results | Script ran twice before commit | Deduplication is built-in, safe to re-run |

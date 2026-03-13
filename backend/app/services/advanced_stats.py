@@ -16,6 +16,7 @@ from app.models import TeamSeasonStats, GameResult
 PYTH_EXPONENT = 9       # Sports-Reference uses 9 for CBB
 BARTHAG_EXPONENT = 11.5  # BartTorvik's Pythagorean exponent for efficiency
 ADJ_ITERATIONS = 10      # Iterations for adjusted efficiency convergence
+HOME_COURT_ADJ = 3.5     # KenPom-style home court advantage (eff pts per 100 poss)
 
 
 def r(val, digits=2):
@@ -92,6 +93,24 @@ def compute_advanced_stats(session, season: int, gender: str = None):
             def_eff_w = game.l_score / poss * 100
             off_eff_l = game.l_score / poss * 100
             def_eff_l = game.w_score / poss * 100
+
+            # Home court adjustment (KenPom-style): neutralize location
+            # Home team gets offense inflated / defense deflated by venue
+            loc = game.w_loc  # H=winner at home, A=winner away, N=neutral
+            hca = HOME_COURT_ADJ / 2  # Split adjustment between offense and defense
+            if loc == "H":
+                # Winner was home — subtract advantage from their stats
+                off_eff_w -= hca
+                def_eff_w += hca
+                off_eff_l += hca
+                def_eff_l -= hca
+            elif loc == "A":
+                # Winner was away — add advantage (they performed in hostile venue)
+                off_eff_w += hca
+                def_eff_w -= hca
+                off_eff_l -= hca
+                def_eff_l += hca
+            # loc == "N" or None: no adjustment
 
             # Winner game record
             team_games[game.w_team_id].append({

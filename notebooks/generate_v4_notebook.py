@@ -1,16 +1,14 @@
-"""Generate the V4 model notebook as valid .ipynb JSON.
+"""Generate the V5 model notebook as valid .ipynb JSON.
 
-V4 Key Changes from V3:
-- Trains on ALL games (regular + conf tourney + NCAA tourney) = 200K+ games
+V5 Key Changes from V4:
+- Recency-weighted training — exponential decay favoring recent seasons (half-life 5 seasons)
+- All V4 features retained (40 features)
+
+V4 features (retained):
+- Trains on ALL games (regular + conf tourney + NCAA tourney) = 163K+ games
 - game_type as a feature (regular/conf_tourney/tourney)
 - Location feature (H/A/N)
-- Rest days between games
-- KenPom rank from Massey Ordinals (actual KenPom data in Kaggle!)
-- NET/consensus rank features
-- Adjusted efficiency margin diff
-- Quality wins/losses
-- Barthag diff
-- ~40 features total (vs 28 in V3)
+- Rest days, KenPom/NET/consensus ranks, AdjEM, Barthag, quality wins
 """
 import json
 
@@ -32,25 +30,22 @@ def code(lines):
 # NOTEBOOK CONTENT
 # =========================================================================
 
-md("""# Ubunifu Madness — V4 Model (Full Training Set)
+md("""# Ubunifu Madness — V5 Model
 
-**Key changes from V3:**
-- Training on **ALL game types** (regular season, conf tourney, NCAA tourney) = 200K+ games with box scores
-- `game_type` as a feature (regular / conf_tourney / tourney) — model learns different dynamics
-- `location` feature (Home / Away / Neutral)
-- `rest_days` differential between teams
-- **KenPom rank** from Massey Ordinals (POM) — actual KenPom rankings in the Kaggle data!
-- **NET rank** and **consensus rank** (median across 65+ ranking systems)
-- **Adjusted efficiency margin** and **Barthag** diffs
-- **Quality wins** metric (wins vs top-50 opponents)
-- ~40 features total (vs 28 in V3)
-- Training on **2012+** (modern era only)
+**Key changes from V4:**
+- **Recency-weighted training** — exponential decay favoring recent seasons (half-life 5 seasons)
+- 40 features (same as V4)
+
+**Retained from V4:**
+- All game types (regular + conf tourney + NCAA tourney) = 163K+ games
+- Game context features, rest days, rankings, AdjEM, Barthag, quality wins
+- LR + LightGBM ensemble with smooth isotonic calibration
 
 **Notebook outputs:**
-1. `artifacts/lr_v4.joblib` — Logistic Regression model
-2. `artifacts/lgb_v4.joblib` — LightGBM model
-3. `artifacts/calibrator_v4.joblib` — Isotonic calibrator
-4. `artifacts/model_metadata_v4.json` — Feature cols, weights, config
+1. `artifacts/lr_v5.joblib` — Logistic Regression model
+2. `artifacts/lgb_v5.joblib` — LightGBM model
+3. `artifacts/calibrator_v5.joblib` — Isotonic calibrator
+4. `artifacts/model_metadata_v5.json` — Feature cols, weights, config
 5. `submissions/` — Kaggle submissions""")
 
 # --- Cell: Imports and Config ---
@@ -88,8 +83,11 @@ LR_WEIGHT = 0.378        # V3 optimal blend weights
 LGB_WEIGHT = 0.622
 INCLUDE_REGULAR_SEASON = True  # V4: train on all games
 
-print(f"V4 Model — training on {'all games' if INCLUDE_REGULAR_SEASON else 'tournament only'}")
-print(f"Modern era: {MIN_TRAIN_SEASON}+, Target: {TARGET_SEASON}")""")
+RECENCY_HALF_LIFE = 5  # seasons — weight halves every 5 years
+
+print(f"V5 Model — training on {'all games' if INCLUDE_REGULAR_SEASON else 'tournament only'}")
+print(f"Modern era: {MIN_TRAIN_SEASON}+, Target: {TARGET_SEASON}")
+print(f"Recency half-life: {RECENCY_HALF_LIFE} seasons")""")
 
 # --- Cell: Load Data ---
 md("""## Part 1 — Load Data
@@ -604,7 +602,7 @@ code("""def build_rest_days(all_results_df):
 rest_days = build_rest_days(all_results)
 print(f"Rest days entries: {len(rest_days):,}")""")
 
-# --- Build Matchup Feature Matrix (V4) ---
+# --- Build Matchup Feature Matrix (V5) ---
 code("""FEATURE_COLS = [
     # Core Elo (4)
     "elo_a", "elo_b", "elo_diff", "elo_prob",
@@ -824,13 +822,20 @@ print(f"Skipped: {skipped}")
 print(f"NaN check: {np.isnan(X).sum()} NaN values")
 
 # Replace NaN with 0
-X = np.nan_to_num(X, nan=0.0)""")
+X = np.nan_to_num(X, nan=0.0)
+
+# V5: Recency weights — exponential decay by season
+max_season = meta_df["season"].max()
+decay_rate = np.log(2) / RECENCY_HALF_LIFE
+sample_weights = np.exp(-decay_rate * (max_season - meta_df["season"].values))
+print(f"\\nRecency weights: newest={sample_weights.max():.3f}, oldest={sample_weights.min():.3f}")
+print(f"Weight ratio (newest/oldest): {sample_weights.max() / sample_weights.min():.1f}x")""")
 
 # --- Train Models ---
 md("""## Part 4 — Model Training
 
-Same architecture as V3: LR + LightGBM ensemble with isotonic calibration.
-But now trained on 200K+ games instead of 4.3K.""")
+LR + LightGBM ensemble with smooth isotonic calibration.
+V5: recency-weighted training (exponential decay by season).""")
 
 code("""# Season-based CV (like V3)
 unique_seasons = sorted(meta_df["season"].unique())
@@ -841,14 +846,16 @@ val_mask = meta_df["season"].isin(val_seasons).values
 
 X_train, X_val = X[train_mask], X[val_mask]
 y_train, y_val = y[train_mask], y[val_mask]
+w_train, w_val = sample_weights[train_mask], sample_weights[val_mask]
 
 print(f"Train: {X_train.shape[0]:,} games (seasons {unique_seasons[0]}-{unique_seasons[-5]})")
 print(f"Val: {X_val.shape[0]:,} games (seasons {val_seasons})")
-print(f"Val game types: {meta_df[val_mask]['game_type'].value_counts().to_dict()}")""")
+print(f"Val game types: {meta_df[val_mask]['game_type'].value_counts().to_dict()}")
+print(f"Train weight range: [{w_train.min():.3f}, {w_train.max():.3f}]")""")
 
 code("""# Logistic Regression
 lr = LogisticRegression(C=0.05, max_iter=2000, solver="lbfgs")
-lr.fit(X_train, y_train)
+lr.fit(X_train, y_train, sample_weight=w_train)
 lr_pred_val = lr.predict_proba(X_val)[:, 1]
 lr_pred_train = lr.predict_proba(X_train)[:, 1]
 
@@ -883,7 +890,9 @@ lgb_params = {
 lgb_model = lgb.LGBMClassifier(**lgb_params)
 lgb_model.fit(
     X_train, y_train,
+    sample_weight=w_train,
     eval_set=[(X_val, y_val)],
+    eval_sample_weight=[w_val],
     callbacks=[lgb.early_stopping(50, verbose=False)],
 )
 lgb_pred_val = lgb_model.predict_proba(X_val)[:, 1]
@@ -947,23 +956,24 @@ print(f"Val Brier: {brier_score_loss(y_val, cal_val):.4f}")
 print(f"Val Accuracy: {accuracy_score(y_val, (cal_val > 0.5).astype(int)):.4f}")
 
 # Compare V3 vs V4
-print("\\n=== V4 Summary ===")
-print(f"Training games: {len(X):,} (V3 had ~4,300)")
-print(f"Features: {len(FEATURE_COLS)} (V3 had 28)")
+print("\\n=== V5 Summary ===")
+print(f"Training games: {len(X):,}")
+print(f"Features: {len(FEATURE_COLS)}")
+print(f"Recency half-life: {RECENCY_HALF_LIFE} seasons")
 print(f"Val Brier (calibrated): {brier_score_loss(y_val, cal_val):.4f}")""")
 
 # --- Save Artifacts ---
 code("""# Save models
-joblib.dump(lr, OUT_DIR / "lr_v4.joblib")
-joblib.dump(lgb_model, OUT_DIR / "lgb_v4.joblib")
-joblib.dump(calibrator, OUT_DIR / "calibrator_v4.joblib")
+joblib.dump(lr, OUT_DIR / "lr_v5.joblib")
+joblib.dump(lgb_model, OUT_DIR / "lgb_v5.joblib")
+joblib.dump(calibrator, OUT_DIR / "calibrator_v5.joblib")
 
 # Save smooth calibration data
-np.savez(OUT_DIR / "smooth_cal_v4.npz", x=smooth_x, y=smooth_y)
+np.savez(OUT_DIR / "smooth_cal_v5.npz", x=smooth_x, y=smooth_y)
 
 # Save metadata
 metadata = {
-    "version": "v4",
+    "version": "v5",
     "feature_cols": FEATURE_COLS,
     "n_features": len(FEATURE_COLS),
     "lr_weight": LR_WEIGHT,
@@ -978,7 +988,7 @@ metadata = {
     "val_accuracy": float(accuracy_score(y_val, (cal_val > 0.5).astype(int))),
 }
 
-with open(OUT_DIR / "model_metadata_v4.json", "w") as f:
+with open(OUT_DIR / "model_metadata_v5.json", "w") as f:
     json.dump(metadata, f, indent=2)
 
 print("Artifacts saved!")
@@ -1013,7 +1023,7 @@ for _, row in sub_template.iterrows():
     results.append({"ID": row["ID"], "Pred": cal_prob})
 
 sub_df = pd.DataFrame(results)
-sub_df.to_csv(SUB_DIR / "stage2_submission_v4.csv", index=False)
+sub_df.to_csv(SUB_DIR / "stage2_submission_v5.csv", index=False)
 print(f"Submission saved: {len(sub_df):,} predictions")
 print(f"Pred range: [{sub_df['Pred'].min():.3f}, {sub_df['Pred'].max():.3f}]")
 print(f"Mean pred: {sub_df['Pred'].mean():.3f}")""")
@@ -1032,7 +1042,7 @@ nb = {
 }
 
 from pathlib import Path as _Path
-out_path = _Path("Ubunifu_Madness_V4.ipynb")
+out_path = _Path("Ubunifu_Madness_V5.ipynb")
 with open(out_path, "w") as f:
     json.dump(nb, f, indent=1)
 

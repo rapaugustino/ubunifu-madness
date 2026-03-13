@@ -43,7 +43,7 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
 - **28 features** across 7 categories
 - **Notebook:** `notebooks/Ubunifu_Madness_V3_Modern.ipynb`
 
-### V4 (Current — March 2026)
+### V4 (March 2026, Retired)
 
 - **Training data:** 2012-2025, ALL game types — regular season (153K), conf tourney (7.8K), NCAA tourney (1.7K) = **163,000+ games**
 - **Ensemble:** 37.8% LR + 62.2% LGB
@@ -56,7 +56,20 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
   - Raw win percentages as non-differenced features (LGB captures nonlinearities)
   - Season-based CV: train on 2012-2022, validate on 2023-2026
 
-**Notebook:** `notebooks/generate_v4_notebook.py` (generates `Ubunifu_Madness_V4_executed.ipynb`)
+### V5 (Current — March 2026)
+
+- **Training data:** Same as V4 — 2012-2025, ALL game types (163K+ games)
+- **Ensemble:** 37.8% LR + 62.2% LGB
+- **Val Brier:** 0.137, **Val Accuracy:** 80.0% (2023-2026 holdout)
+- **40 features** (same as V4)
+- **Key improvements over V4:**
+  - **Recency-weighted training:** Exponential decay with 5-season half-life — 2025 games weighted ~7x more than 2012 games. Applied to both LR (`sample_weight`) and LightGBM (`sample_weight` + `eval_sample_weight`). This emphasizes modern-era patterns (transfer portal, NIL, 3-point revolution) without discarding older data entirely.
+  - **Home court adjustment in AdjEM:** KenPom-style ±3.5 efficiency points split between offense and defense to neutralize venue advantage in advanced stats computation. Home team's offense deflated by 1.75 pts/100 poss, defense inflated by 1.75.
+  - **Reweighted power ratings:** Efficiency-based metrics now comprise 75% of power rating (AdjEM 50% + Barthag 25%), up from 65%. Elo reduced to 5%, Win% to 5%. Rankings now align within 2 places of AP/KenPom for top teams.
+  - **Rewritten matchup explanations:** `explain_matchup()` uses actual model feature differences instead of disconnected signal blend weights. Only reports factors where the favored team genuinely has the edge.
+  - **Head-to-head investigated and rejected:** Season h2h record was tested as a feature but caused massive label leakage (Val Brier dropped to 0.042, accuracy jumped to 92.4% — clearly too good). Regular season series almost perfectly predicts conference tournament rematches. Removed from training; kept as explanation-only signal in live predictor.
+
+**Notebook:** `notebooks/generate_v4_notebook.py` (generates `Ubunifu_Madness_V5.ipynb`)
 
 ## Pipeline Overview
 
@@ -115,7 +128,7 @@ The margin-of-victory (MOV) multiplier rewards dominant wins more, but is dampen
 new_elo = mean_elo + regression_factor * (old_elo - mean_elo)
 ```
 
-## Step 2: Feature Engineering (40 Features in V4)
+## Step 2: Feature Engineering (40 Features in V5)
 
 Features are computed as **differences** between Team A and Team B (A - B), making the model symmetric.
 
@@ -186,7 +199,7 @@ Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) take
 | `conf_tourney_wins_diff` | Conference tournament wins |
 | `sos_diff` | Strength of schedule (avg opponent Elo) |
 
-### Category 8: Game Context (V4, 4 features)
+### Category 8: Game Context (4 features)
 
 | Feature | Description |
 |---------|-------------|
@@ -195,7 +208,7 @@ Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) take
 | `is_neutral_site` | 1 if neutral site |
 | `rest_days_diff` | Days since last game (A - B) |
 
-### Category 9: Quality & Rankings (V4, 5 features)
+### Category 9: Quality & Rankings (8 features)
 
 | Feature | Description |
 |---------|-------------|
@@ -209,7 +222,7 @@ Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) take
 
 ## Advanced Analytics (Dashboard)
 
-The following metrics are computed by `compute_advanced_stats()` and displayed on the frontend power rankings dashboard. Since V4, AdjEM, Barthag, and quality win % are also used as model features.
+The following metrics are computed by `compute_advanced_stats()` and displayed on the frontend power rankings dashboard. AdjEM, Barthag, and quality win % are also used as model features.
 
 ### Opponent-Adjusted Efficiency (AdjOE, AdjDE, AdjEM)
 
@@ -223,6 +236,8 @@ For each iteration:
 ```
 
 This ensures a team that plays a tough schedule gets credit for maintaining efficiency against strong defenses, and vice versa.
+
+**V5 Update:** Home court adjustment (±3.5 efficiency points, KenPom-style) is applied per-game before aggregation. Home team's raw offense is deflated by 1.75 pts/100 poss and defense inflated by 1.75, neutralizing venue advantage. This produces more accurate AdjEM for teams with heavy home schedules.
 
 ### Barthag (Win Probability vs Average D1 Team)
 
@@ -305,7 +320,7 @@ Higher values indicate greater upset vulnerability. This metric is exclusive to 
 | Tempo | Possessions per game (pace of play) |
 | SOS | Strength of schedule (average opponent Elo) |
 
-> **V4 Update:** AdjEM, Barthag, and quality win % are now V4 model features, alongside game context flags and external rankings.
+> **V5 Update:** AdjEM, Barthag, and quality win % are model features alongside game context flags and external rankings. Power ratings now weight AdjEM (50%) + Barthag (25%) = 75% efficiency-based, with Elo (5%), Win% (5%), SOS (10%), Momentum (5%).
 
 ## Step 3: Model Training
 
@@ -325,7 +340,7 @@ This is critical because:
 | Logistic Regression | 0.1651 | 0.1612 | — | Reliable baseline |
 | LightGBM | 0.1697 | 0.1589 | — | Improved with modern-era tuning |
 | Ensemble (pre-calibration) | 0.1646 | 0.1575 | — | LR+LGB weighted average |
-| **Ensemble (calibrated)** | **0.1607** | **0.1543** | **0.137** | V4: 163K games, 40 features |
+| **Ensemble (calibrated)** | **0.1607** | **0.1543** | **0.137** | V5: 163K games, 40 features, recency-weighted |
 
 In V3, LightGBM significantly improved with Optuna-tuned hyperparameters on modern data, flipping from worse-than-LR to better-than-LR.
 
@@ -381,17 +396,17 @@ Raw ensemble probabilities are systematically miscalibrated — the model tends 
 | Optimized ensemble | 0.1646 | 0.1575 |
 | **After calibration** | **0.1607** | **0.1543** |
 
-## Step 6: Conference Tournament Compression
+## Step 6: Conference Tournament Compression (V3 only)
 
-**Problem:** The model was trained on NCAA tournament games but evaluated on conference tournament games during the regular season. Same-conference teams know each other well — scouting, familiarity, and rivalry dynamics make these games less predictable than the model expects. The 60-70% confidence bin showed 65% predicted but only 43-53% actual win rate.
+**Problem (V3):** The V3 model was trained on NCAA tournament games only and was overconfident on conference tournament games.
 
-**Fix:** For conference tournament games, compress predictions 20% toward 0.5:
+**V3 Fix:** For conference tournament games, compress predictions 20% toward 0.5:
 
 ```python
 prob = 0.5 + (prob - 0.5) * 0.80  # e.g., 0.70 → 0.66
 ```
 
-This reduces overconfidence for same-conference matchups without affecting NCAA tournament predictions.
+**V4/V5:** No manual compression needed. The model trains on all game types and has `is_conf_tourney` as a feature — it learns the compression itself.
 
 ## Step 7: Tossup Threshold
 
@@ -405,7 +420,7 @@ Games where the model's confidence is below 55% are classified as **tossups** an
 
 During the season, the predictor operates in a 3-layer cascade:
 
-1. **`ml_ensemble`** — V4 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. 40 features built from live DB state. Highest quality.
+1. **`ml_ensemble`** — V5 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. 40 features built from live DB state. Highest quality.
 2. **`blended`** / **`live_blend`** — Fallback if artifacts unavailable. Blends Elo (60%) + SOS-adjusted record (40%).
 3. **`no_data`** — Absolute fallback: 50%.
 
@@ -443,15 +458,19 @@ After deploying V3 with smooth calibration on March 10, 2026:
 
 1. **Why retrain on modern data only (2012+)?** Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading.
 
-2. **What changed in V4?** V3 only trained on ~4,300 tournament games. V4 trains on 163,000+ games across regular season, conference tournaments, and NCAA tournaments. Game-type context is a feature — the model learns that conference tournament games are less predictable without needing manual compression hacks.
+2. **What changed from V3 to V5?** V3 trained on ~4,300 tournament games only. V4 expanded to 163K+ games across all game types with game-context features. V5 added recency-weighted training (5-season half-life) to emphasize modern-era patterns and KenPom-style home court adjustment for more accurate efficiency metrics.
 
 3. **How did you fix the calibration clustering?** Isotonic regression with limited training data creates a step function. We use linear interpolation between step midpoints to produce smooth, continuous probabilities.
 
 4. **Why did LightGBM improve so much?** On modern data (2012+), LGB's ability to capture nonlinear interactions (seed × Elo, conference strength × momentum) becomes valuable. With Optuna tuning on the right data distribution, LGB went from the weaker model to the dominant one (62% weight).
 
-5. **What's new in V4's features?** Game context flags (is_conf_tourney, is_neutral_site), rest days between games, quality win percentage (vs top-50 Elo), adjusted efficiency margin, Barthag, and KenPom/NET/consensus rankings from Massey Ordinals.
+5. **What's new in V5?** Recency-weighted training (newer games matter more via exponential decay), home court adjustment in AdjEM computation, reweighted power ratings (75% efficiency-based), and feature-diff based matchup explanations that only report factors where the favored team genuinely has the edge.
 
-6. **How does it compare to Vegas?** Our V4 validation Brier of 0.137 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have.
+6. **Why recency weighting?** Basketball changed fundamentally with the transfer portal (2018+) and NIL (2021+). A 2025 game is ~7x more informative than a 2012 game for predicting 2026 outcomes. Recency weighting captures this without discarding older data entirely.
+
+7. **How does it compare to Vegas?** Our V5 validation Brier of 0.137 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have.
+
+8. **Why not use head-to-head record as a feature?** We tested it — validation Brier dropped to 0.042 (accuracy 92.4%), revealing massive label leakage. Regular season series almost perfectly predicts conference tournament rematches. The feature is too good to be true.
 
 ## Live Elo Updates
 

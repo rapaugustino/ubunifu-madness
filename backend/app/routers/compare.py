@@ -108,7 +108,11 @@ def compare_teams(
     if not detail_a or not detail_b:
         raise HTTPException(404, "One or both teams not found")
 
-    # Get prediction
+    # Prevent cross-gender comparisons (different Elo pools)
+    if detail_a["gender"] != detail_b["gender"]:
+        raise HTTPException(400, "Cannot compare teams from different genders (separate Elo pools)")
+
+    # Get prediction (with gender filter)
     lo, hi = min(team_a_id, team_b_id), max(team_a_id, team_b_id)
     pred = (
         db.query(Prediction)
