@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.database import SessionLocal
 from app.models import GamePrediction, Team
 from app.services import espn
-from app.services.predictor import predict_matchup, reload_model_bundle
+from app.services.predictor import predict_matchup, explain_matchup, reload_model_bundle
 
 SEASON = 2026
 
@@ -166,6 +166,9 @@ def main():
                     prob_away, source = predict_matchup(
                         db, away_kid, home_kid, is_conf_tourney=is_conf_tourney
                     )
+                    expl = explain_matchup(
+                        db, away_kid, home_kid, prob_a=prob_away, is_conf_tourney=is_conf_tourney
+                    )
                 except Exception as e:
                     print(f"    Predict error {away_kid} vs {home_kid}: {e}")
                     total_errors += 1
@@ -182,6 +185,7 @@ def main():
                     home_name=game["home"].get("name"),
                     locked_prob_away=prob_away,
                     prediction_source=source,
+                    explanation=expl,
                     game_type=detected_type,
                 )
 

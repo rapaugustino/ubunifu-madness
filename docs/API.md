@@ -117,6 +117,45 @@ Power rankings sorted by Elo rating.
 }
 ```
 
+### `GET /rankings/conference-standings`
+
+Within-conference standings (team rankings within each conference).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `gender` | string | `"M"` | `M` or `W` |
+| `conf` | string | — | Filter by conference abbreviation (e.g., `acc`, `big_ten`) |
+| `season` | int | 2026 | Season year |
+
+**Response:**
+```json
+{
+  "conferences": [
+    {
+      "abbrev": "acc",
+      "name": "Atlantic Coast Conference",
+      "teams": [
+        {
+          "seed": 1,
+          "team": { "id": 1181, "name": "Duke", "logo": "...", "elo": 2148.0 },
+          "confRecord": "17-1",
+          "confWinPct": 0.944,
+          "overallRecord": "30-2",
+          "overallWinPct": 0.938,
+          "homeRecord": "15-0",
+          "awayRecord": "10-1",
+          "streak": "W9",
+          "gamesBehind": 0,
+          "avgPointsFor": 82.1,
+          "avgPointsAgainst": 65.3,
+          "pointDiff": 537
+        }
+      ]
+    }
+  ]
+}
+```
+
 ### `GET /rankings/conferences`
 
 Conference rankings by strength metrics.

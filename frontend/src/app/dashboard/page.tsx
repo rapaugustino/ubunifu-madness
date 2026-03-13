@@ -67,6 +67,28 @@ interface ConferenceRanking {
   avgBarthag: number;
 }
 
+interface StandingTeam {
+  seed: number;
+  team: { id: number; name: string; logo?: string; color?: string; elo: number };
+  confRecord: string;
+  confWinPct: number;
+  overallRecord: string;
+  overallWinPct: number;
+  homeRecord: string;
+  awayRecord: string;
+  streak: string;
+  gamesBehind: number;
+  avgPointsFor: number;
+  avgPointsAgainst: number;
+  pointDiff: number;
+}
+
+interface ConferenceStanding {
+  abbrev: string;
+  name: string;
+  teams: StandingTeam[];
+}
+
 type SortField = "rank" | "adjEM" | "adjOE" | "adjDE" | "barthag" | "luck" | "sos" | "upsetVulnerability" | "tempo";
 
 function fmt(val: number | null, digits = 1): string {
@@ -102,11 +124,13 @@ function vulnColor(v: number | null): string {
 export default function DashboardPage() {
   const [rankings, setRankings] = useState<PowerRanking[]>([]);
   const [conferences, setConferences] = useState<ConferenceRanking[]>([]);
+  const [standings, setStandings] = useState<ConferenceStanding[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"teams" | "conferences">("teams");
+  const [activeTab, setActiveTab] = useState<"teams" | "conferences" | "standings">("teams");
+  const [expandedConf, setExpandedConf] = useState<string | null>(null);
   const [gender, setGender] = useGender();
   const [page, setPage] = useState(1);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -118,17 +142,20 @@ export default function DashboardPage() {
     if (!background) setLoading(true);
     else setRefreshing(true);
     try {
-      const [rankData, confData] = await Promise.all([
+      const [rankData, confData, standingsData] = await Promise.all([
         fetch(`${API_URL}/api/rankings/power?gender=${gender}&limit=500`).then((r) => r.json()),
         fetch(`${API_URL}/api/rankings/conferences?gender=${gender}`).then((r) => r.json()),
+        fetch(`${API_URL}/api/rankings/conference-standings?gender=${gender}`).then((r) => r.json()),
       ]);
       setRankings(rankData.rankings || []);
       setConferences(confData.conferences || []);
+      setStandings(standingsData.conferences || []);
       setLastUpdated(new Date());
     } catch {
       if (!background) {
         setRankings([]);
         setConferences([]);
+        setStandings([]);
       }
     } finally {
       setLoading(false);
@@ -266,6 +293,16 @@ export default function DashboardPage() {
           Team Rankings
         </button>
         <button
+          onClick={() => setActiveTab("standings")}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "standings"
+              ? "bg-accent/15 text-accent"
+              : "text-muted hover:text-foreground"
+          }`}
+        >
+          Conference Standings
+        </button>
+        <button
           onClick={() => setActiveTab("conferences")}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
             activeTab === "conferences"
@@ -277,8 +314,136 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Conference standings search (only shown on standings tab) */}
+      {activeTab === "standings" && (
+        <div className="mb-4">
+          <div className="relative w-full sm:w-64">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              type="text"
+              placeholder="Search conferences or teams..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 bg-card border border-card-border rounded-lg text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50 w-full"
+            />
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center text-muted py-20">Loading rankings...</div>
+      ) : activeTab === "standings" ? (
+        <div className="space-y-3">
+          {standings
+            .filter((c) =>
+              searchQuery === "" ||
+              c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.teams.some((t) => t.team.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            )
+            .map((conf) => {
+              const isExpanded = expandedConf === conf.abbrev;
+              const leader = conf.teams[0];
+              return (
+                <div key={conf.abbrev} className="rounded-xl border border-card-border overflow-hidden">
+                  <button
+                    onClick={() => setExpandedConf(isExpanded ? null : conf.abbrev)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-sm">{conf.name}</span>
+                      <span className="text-xs text-muted">{conf.teams.length} teams</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {leader && (
+                        <span className="text-xs text-muted hidden sm:inline">
+                          Leader: <span className="text-foreground font-medium">{leader.team.name}</span> ({leader.confRecord})
+                        </span>
+                      )}
+                      {isExpanded ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-card/50 border-t border-card-border">
+                            <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 w-8">#</th>
+                            <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2">Team</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2">Conf</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2">Overall</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden sm:table-cell">Home</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden sm:table-cell">Away</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden md:table-cell">GB</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2">Streak</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden lg:table-cell">PPG</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden lg:table-cell">OppPPG</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden lg:table-cell">Diff</th>
+                            <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-2 hidden xl:table-cell">Elo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {conf.teams.map((t) => {
+                            const streakIsWin = t.streak.startsWith("W");
+                            return (
+                              <tr key={t.team.id} className="border-t border-card-border/30 hover:bg-white/[0.02] transition-colors">
+                                <td className="px-4 py-2">
+                                  <span className="text-xs font-mono text-muted">{t.seed}</span>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-2">
+                                    {t.team.logo ? (
+                                      <img src={t.team.logo} alt="" className="w-5 h-5 object-contain shrink-0" />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded bg-white/5 shrink-0" />
+                                    )}
+                                    <span className="text-sm font-medium">{t.team.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  <span className="text-sm font-mono font-semibold">{t.confRecord}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  <span className="text-sm font-mono text-muted">{t.overallRecord}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden sm:table-cell">
+                                  <span className="text-xs font-mono text-muted">{t.homeRecord}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden sm:table-cell">
+                                  <span className="text-xs font-mono text-muted">{t.awayRecord}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden md:table-cell">
+                                  <span className="text-xs font-mono text-muted">{t.gamesBehind === 0 ? "—" : t.gamesBehind}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  <span className={`text-xs font-mono font-medium ${streakIsWin ? "text-green-400" : "text-red-400"}`}>
+                                    {t.streak || "—"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden lg:table-cell">
+                                  <span className="text-xs font-mono">{t.avgPointsFor.toFixed(1)}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden lg:table-cell">
+                                  <span className="text-xs font-mono">{t.avgPointsAgainst.toFixed(1)}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden lg:table-cell">
+                                  <span className={`text-xs font-mono font-medium ${t.pointDiff > 0 ? "text-green-400" : t.pointDiff < 0 ? "text-red-400" : "text-muted"}`}>
+                                    {t.pointDiff > 0 ? "+" : ""}{t.pointDiff}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-right hidden xl:table-cell">
+                                  <span className="text-xs font-mono">{t.team.elo}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
       ) : activeTab === "teams" ? (
         <div className="rounded-xl border border-card-border overflow-x-auto">
           <table className="w-full">

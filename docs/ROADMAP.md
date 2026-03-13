@@ -28,6 +28,8 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 - **Performance tracking page** — cumulative accuracy charts, daily breakdowns, calibration curves, paginated game log
 - **Locked predictions** — every prediction frozen before tipoff, never changed retroactively
 - **Conference strength as prediction signal** — avg Elo probability + NC win rate differential blended into predictions
+- **Conference standings from ESPN** — within-conference rankings (seed, conf record, home/away splits, streak, PPG) for both M and W, refreshed daily via cron
+- **Conf tourney confidence compression** — 0.85 post-calibration compression for conf tourney predictions, fixing 70-75% band from +11% overconfident to near-perfect
 - **Comprehensive chat agent** — blended matchup predictions, live scores, tossup awareness, SOS and conference knowledge
 - **Advanced analytics dashboard** — KenPom-depth metrics (AdjOE/AdjDE/AdjEM, Barthag, luck, floor/ceiling, upset vulnerability) computed from game data and displayed in sortable, expandable power rankings
 

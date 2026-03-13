@@ -109,10 +109,11 @@ TOOLS = [
     {
         "name": "get_matchup_prediction",
         "description": (
-            "Get the blended 7-signal win probability prediction for a matchup between two teams. "
-            "Combines Elo, static model, advanced analytics (AdjEM + luck regression), momentum, "
-            "conference strength, SOS-adjusted record, and efficiency. "
-            "Returns each team's win probability, confidence level, tossup status, and key stat comparisons. "
+            "Get the V5 ML ensemble win probability prediction for a matchup between two teams. "
+            "Uses a 40-feature LR + LightGBM ensemble with smooth isotonic calibration, "
+            "incorporating Elo, adjusted efficiency (AdjEM), momentum, SOS, conference strength, "
+            "and more. Returns each team's win probability, confidence level, tossup status, "
+            "key stat comparisons, and a natural-language explanation of the top factors. "
             "Use this when the user asks who would win, or about a specific matchup."
         ),
         "input_schema": {
@@ -212,7 +213,7 @@ TOOLS = [
         "description": (
             "Build a complete NCAA tournament bracket by predicting all 63 games. "
             "Requires tournament seeds to be available (after Selection Sunday). "
-            "Uses our 7-signal model to predict each matchup round by round. "
+            "Uses our V5 ML ensemble to predict each matchup round by round. "
             "Supports strategies: 'chalk' (pick all favorites), 'balanced' (some upsets), "
             "'chaos' (maximize upsets). Use this when users ask to fill out their bracket, "
             "build a bracket, or ask for AI bracket picks."
@@ -328,7 +329,7 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
     if not team_b:
         return {"error": f"Team not found: '{input_data['team_b_name']}'"}
 
-    # Use the blended 7-signal predictor (team_a is "away", team_b is "home")
+    # Use the V5 ML ensemble predictor (team_a is "away", team_b is "home")
     prob_a, source = predict_matchup(db, team_a.id, team_b.id)
 
     detail_a = _team_detail(db, team_a)
@@ -337,7 +338,7 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
     confidence = max(prob_a, 1 - prob_a)
     is_tossup = confidence < 0.55
 
-    explanation = explain_matchup(db, team_a.id, team_b.id)
+    explanation = explain_matchup(db, team_a.id, team_b.id, prob_a=prob_a)
     style = analyze_style_matchup(db, team_a.id, team_b.id)
 
     result = {
@@ -635,7 +636,7 @@ def _exec_build_bracket(db: Session, gender: str, input_data: dict) -> dict:
     def pick_winner(team_a: dict, team_b: dict) -> tuple[dict, float, str]:
         """Predict and pick a winner based on strategy."""
         prob_a, source = predict_matchup(db, team_a["teamId"], team_b["teamId"])
-        explanation = explain_matchup(db, team_a["teamId"], team_b["teamId"])
+        explanation = explain_matchup(db, team_a["teamId"], team_b["teamId"], prob_a=prob_a)
 
         # Determine favorite/underdog
         if prob_a >= 0.5:
@@ -840,17 +841,24 @@ WHEN TO USE TOOLS vs. NOT:
 ABOUT UBUNIFU MADNESS (answer from this when users ask about the app):
 - Built by Richard Pallangyo for the Kaggle March ML Mania 2026 competition.
 
-PREDICTION SYSTEM — BLENDED 7-SIGNAL MODEL:
-Live predictions use a blended approach that combines 7 signals, not just the static model:
-1. Static Model (28%): LR (37.8%) + LightGBM (62.2%) ensemble trained on modern-era games (2012-2025) with 28 features. CV Brier score 0.1543.
-2. Elo (25%): Real-time Elo ratings updated daily from ESPN. K=19.6, home advantage=90.9 points. Between seasons, ratings regress 5% toward 1500.
-3. Advanced Analytics (15%): Opponent-adjusted efficiency margin (AdjEM) with luck regression. Penalizes teams whose record outpaces underlying quality. Updates daily.
-4. Momentum (12%): Last 10 games win percentage and margin of victory. Captures hot/cold streaks.
-5. SOS-Adjusted Record (10%): Win percentage adjusted for strength of schedule. A 25-5 record against tough opponents matters more than 25-5 against weak ones.
-6. Conference Strength (8%): 70% conference average Elo probability + 30% non-conference win rate differential. Accounts for quality of competition.
-7. Efficiency (2%): Offensive and defensive points per 100 possessions differential.
+PREDICTION SYSTEM — V5 ML ENSEMBLE:
+Live predictions use a trained LR (37.8%) + LightGBM (62.2%) ensemble model with 40 features and smooth isotonic calibration. Validation Brier score: 0.137, accuracy: 80%.
 
-When the static model isn't available for a team, the remaining 6 signals are re-weighted (source: "live_blend"). This ensures every team gets a data-driven prediction.
+Key features the model uses (as team-A-minus-team-B diffs):
+- Elo ratings (updated daily from ESPN, K=19.6, home advantage=90.9)
+- Adjusted Efficiency Margin (AdjEM) — opponent-adjusted, home-court-corrected (±3.5)
+- Barthag (power rating), Pythagorean win %, luck factor
+- Strength of Schedule (SOS = average opponent Elo)
+- Four Factors (eFG%, turnover rate, offensive rebounding, free throw rate)
+- Momentum (last-10 win %, recent margin), coaching experience
+- Conference strength differential (avg Elo, NC win rate)
+- Game context: is_conf_tourney, is_ncaa_tourney, is_neutral_site, rest_days_diff
+
+Training: 163K games from 2012-2025 (all game types), recency-weighted with 5-season half-life (recent games matter ~7x more).
+
+Conference tournament compression: predictions for conference tournament games are compressed 15% toward 50% after calibration to account for higher volatility (familiarity, rivalry intensity, auto-bid pressure).
+
+If model artifacts aren't available, falls back to an Elo + record blend.
 
 TOSSUP HANDLING:
 - When model confidence is below 55% (neither team favored above 55%), the game is labeled a "TOSSUP."

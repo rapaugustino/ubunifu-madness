@@ -212,7 +212,8 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 5. SOS (strength of schedule) recomputation
 6. Advanced stats recomputation (AdjOE/AdjDE/AdjEM with home court adjustment, Barthag, luck, consistency, floor/ceiling, upset vulnerability)
 7. Power ratings recomputation (AdjEM 50%, Barthag 25%, SOS 10%, Elo 5%, Win% 5%, Momentum 5%)
-8. Lock predictions for upcoming games
+8. Conference standings refresh from ESPN (within-conference rankings, seeds, records, home/away splits)
+9. Lock predictions for upcoming games (with conf tourney compression: 0.85 factor)
 
 ## Troubleshooting
 
@@ -222,5 +223,5 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 | Predictions all show same probability | Isotonic calibration clustering | V3 uses smooth calibration; ensure artifacts are uploaded |
 | ESPN 500 error on scores | `headline` field is None | Fixed in V3: `game.get("headline") or ""` |
 | ml_ensemble not used | Model artifacts not in DB | Run `upload_model_artifacts.py` and restart server |
-| Conference tourney overconfidence | Model trained on NCAA tourney only (V3) | V4+ trains on all game types with is_conf_tourney feature |
+| Conference tourney overconfidence | Model trained on NCAA tourney only (V3) | V4+ trains on all game types with is_conf_tourney feature; V5 adds 0.85 post-calibration compression |
 | Duplicate game results | Script ran twice before commit | Deduplication is built-in, safe to re-run |

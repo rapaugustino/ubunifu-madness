@@ -362,6 +362,64 @@ def get_all_team_records(gender: str = "M") -> list[dict]:
     return records
 
 
+def get_conference_standings(gender: str = "M", season: int = 2026) -> list[dict]:
+    """Get conference standings for all D1 conferences from ESPN.
+
+    Returns list of dicts with conference name, and entries containing
+    team ESPN ID, seed, conference/overall records, home/away splits,
+    streak, and point stats.
+    """
+    sport = SPORTS.get(gender, SPORTS["M"])
+    url = f"https://site.api.espn.com/apis/v2/sports/basketball/{sport}/standings?season={season}"
+    data = _fetch(url, ttl=3600)
+
+    conferences = []
+    for group in data.get("children", []):
+        conf_name = group.get("name", "")
+        entries = []
+        for entry in group.get("standings", {}).get("entries", []):
+            team = entry.get("team", {})
+            espn_id = int(team.get("id", 0))
+            if not espn_id:
+                continue
+
+            # Build stats dicts keyed by type (unique) and name+type for display values
+            stats: dict[str, Any] = {}
+            display: dict[str, str] = {}
+            for s in entry.get("stats", []):
+                key = s.get("type", s.get("name", ""))
+                stats[key] = s.get("value")
+                display[key] = s.get("displayValue", "")
+
+            entries.append({
+                "espnId": espn_id,
+                "name": team.get("displayName", ""),
+                "confSeed": int(stats.get("playoffseed", 0) or 0),
+                "confWins": int(stats.get("vsconf_wins", 0) or 0),
+                "confLosses": int(stats.get("vsconf_losses", 0) or 0),
+                "confWinPct": float(stats.get("vsconf_winpercent", stats.get("leaguewinpercent", 0)) or 0),
+                "overallWins": int(stats.get("wins", 0) or 0),
+                "overallLosses": int(stats.get("losses", 0) or 0),
+                "overallWinPct": float(stats.get("winpercent", 0) or 0),
+                "homeWins": int(stats.get("home_wins", 0) or 0),
+                "homeLosses": int(stats.get("home_losses", 0) or 0),
+                "awayWins": int(stats.get("road_wins", 0) or 0),
+                "awayLosses": int(stats.get("road_losses", 0) or 0),
+                "streak": display.get("streak", ""),
+                "gamesBehind": float(stats.get("vsconf_gamesbehind", 0) or 0),
+                "avgPointsFor": float(stats.get("avgpointsfor", 0) or 0),
+                "avgPointsAgainst": float(stats.get("avgpointsagainst", 0) or 0),
+                "pointDifferential": int(stats.get("pointdifferential", 0) or 0),
+            })
+
+        conferences.append({
+            "name": conf_name,
+            "entries": entries,
+        })
+
+    return conferences
+
+
 def get_tournament_teams(gender: str = "M") -> list[dict]:
     """Get NCAA tournament teams with seeds from ESPN (available after Selection Sunday).
 

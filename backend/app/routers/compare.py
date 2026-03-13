@@ -163,7 +163,7 @@ def compare_teams(
                 "lowerBetter": lower_better,
             })
 
-    explanation = explain_matchup(db, team_a_id, team_b_id)
+    explanation = explain_matchup(db, team_a_id, team_b_id, prob_a=win_prob_a)
     style_analysis = analyze_style_matchup(db, team_a_id, team_b_id)
 
     return {

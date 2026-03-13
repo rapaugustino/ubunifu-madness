@@ -5,7 +5,7 @@ from sqlalchemy import func
 from app.db.session import get_db
 from app.models import (
     Team, EloRating, TeamSeasonStats, TeamConference,
-    TourneySeed, ConferenceStrength, Conference,
+    TourneySeed, ConferenceStrength, Conference, ConferenceStanding,
 )
 
 router = APIRouter(tags=["rankings"])
@@ -209,6 +209,77 @@ def conference_rankings(
             "avgTsPct": round((adv.get("tsPct") or 0) * 100, 1),
             "avgUpsetVuln": round(adv.get("upsetVuln") or 0, 1),
             "avgBarthag": round(adv.get("barthag") or 0, 3),
+        })
+
+    return {"conferences": conferences}
+
+
+@router.get("/rankings/conference-standings")
+def conference_standings(
+    gender: str = Query("M", pattern="^(M|W)$"),
+    conf: str | None = Query(None, description="Filter by conference abbreviation"),
+    season: int = 2026,
+    db: Session = Depends(get_db),
+):
+    """Get within-conference standings (team rankings within each conference)."""
+    query = (
+        db.query(ConferenceStanding, Team)
+        .join(Team, Team.id == ConferenceStanding.team_id)
+        .filter(
+            ConferenceStanding.season == season,
+            ConferenceStanding.gender == gender,
+        )
+    )
+    if conf:
+        query = query.filter(ConferenceStanding.conf_abbrev == conf)
+
+    query = query.order_by(
+        ConferenceStanding.conf_abbrev,
+        ConferenceStanding.conf_seed,
+    )
+    rows = query.all()
+
+    # Conference names
+    conf_names = {r.abbrev: r.description for r in db.query(Conference).all()}
+
+    # Elo lookup
+    elo_map = {
+        r.team_id: r.elo
+        for r in db.query(EloRating).filter(EloRating.season == season).all()
+    }
+
+    # Group by conference
+    from collections import defaultdict
+    grouped: dict[str, list] = defaultdict(list)
+    for standing, team in rows:
+        grouped[standing.conf_abbrev].append({
+            "seed": standing.conf_seed,
+            "team": {
+                "id": team.id,
+                "name": team.name,
+                "logo": team.logo_url,
+                "color": team.color,
+                "elo": round(elo_map.get(team.id, 0), 1),
+            },
+            "confRecord": f"{standing.conf_wins}-{standing.conf_losses}",
+            "confWinPct": round(standing.conf_win_pct or 0, 3),
+            "overallRecord": f"{standing.overall_wins}-{standing.overall_losses}",
+            "overallWinPct": round(standing.overall_win_pct or 0, 3),
+            "homeRecord": f"{standing.home_wins}-{standing.home_losses}",
+            "awayRecord": f"{standing.away_wins}-{standing.away_losses}",
+            "streak": standing.streak or "",
+            "gamesBehind": standing.games_behind or 0,
+            "avgPointsFor": round(standing.avg_points_for or 0, 1),
+            "avgPointsAgainst": round(standing.avg_points_against or 0, 1),
+            "pointDiff": standing.point_differential or 0,
+        })
+
+    conferences = []
+    for abbrev, teams in sorted(grouped.items(), key=lambda x: conf_names.get(x[0], x[0])):
+        conferences.append({
+            "abbrev": abbrev,
+            "name": conf_names.get(abbrev, abbrev),
+            "teams": teams,
         })
 
     return {"conferences": conferences}

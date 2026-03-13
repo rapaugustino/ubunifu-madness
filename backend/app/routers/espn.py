@@ -84,7 +84,7 @@ def live_scores(
                 prob_away, source = predict_matchup(
                     db, away_kid, home_kid, is_conf_tourney=is_conf_tourney
                 )
-                expl = explain_matchup(db, away_kid, home_kid)
+                expl = explain_matchup(db, away_kid, home_kid, prob_a=prob_away, is_conf_tourney=is_conf_tourney)
                 locked = GamePrediction(
                     espn_game_id=espn_gid,
                     game_date=date_str,

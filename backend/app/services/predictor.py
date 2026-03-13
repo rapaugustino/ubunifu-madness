@@ -678,7 +678,13 @@ def predict_matchup(
                     raw = _smooth_calibrate(bundle.calibrator, raw)
 
                 prob = float(np.clip(raw, 0.02, 0.98))
-                # V4 model has is_conf_tourney as a feature — no manual compression needed
+
+                # Conference tournament compression: empirical calibration shows
+                # the 70-75% band hits only ~61% in conf tourneys. Shrink toward
+                # 50% to reduce overconfidence in volatile postseason games.
+                if is_conf_tourney:
+                    prob = 0.5 + (prob - 0.5) * 0.85
+
                 return prob, "ml_ensemble"
         except Exception as e:
             logger.warning(f"ML prediction failed, falling back: {e}")
@@ -783,20 +789,29 @@ def explain_matchup(
     db: Session,
     team_a_id: int,
     team_b_id: int,
+    prob_a: float | None = None,
+    is_conf_tourney: bool = False,
 ) -> str:
     """Generate a 1-line explanation from actual model feature diffs.
 
     Looks at the real feature differences between the teams and reports
     the top 2-3 factors where the favored team has a clear advantage.
+
+    Args:
+        prob_a: Pre-computed P(team_a wins). If None, calls predict_matchup.
+        is_conf_tourney: Passed to predict_matchup if prob_a is None.
     """
     team_a = db.query(Team).filter(Team.id == team_a_id).first()
     team_b = db.query(Team).filter(Team.id == team_b_id).first()
     if not team_a or not team_b:
         return ""
 
-    # Get the actual prediction to determine who's favored
-    overall_prob, _ = predict_matchup(db, team_a_id, team_b_id)
-    favored_is_a = overall_prob >= 0.5
+    # Use the provided probability to stay consistent with the locked prediction
+    if prob_a is None:
+        prob_a, _ = predict_matchup(
+            db, team_a_id, team_b_id, is_conf_tourney=is_conf_tourney
+        )
+    favored_is_a = prob_a >= 0.5
     favored = team_a if favored_is_a else team_b
 
     # Load supporting data

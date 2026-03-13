@@ -36,7 +36,7 @@ from app.services.player_sync import (
     recompute_season_stats,
     compute_importance_scores,
 )
-from app.models import PlayerSeasonStats, GameResult, EloRating, TeamSeasonStats, Team, GamePrediction
+from app.models import PlayerSeasonStats, GameResult, EloRating, TeamSeasonStats, Team, GamePrediction, ConferenceStanding, TeamConference
 from app.services import espn
 from app.services.predictor import predict_matchup
 
@@ -243,6 +243,72 @@ def refresh_sos(session, gender: str) -> int:
     return updated
 
 
+def refresh_conference_standings(session, gender: str) -> int:
+    """Fetch conference standings from ESPN and upsert into DB."""
+    espn_confs = espn.get_conference_standings(gender, SEASON)
+
+    # Map ESPN team IDs to our teams
+    espn_map = {
+        t.espn_id: t
+        for t in session.query(Team).filter(
+            Team.espn_id.isnot(None), Team.gender == gender
+        ).all()
+    }
+
+    # Map team_id -> conf_abbrev from our DB
+    tc_map = {
+        r.team_id: r.conf_abbrev
+        for r in session.query(TeamConference).filter(
+            TeamConference.season == SEASON
+        ).all()
+    }
+
+    upserted = 0
+    for conf in espn_confs:
+        for entry in conf["entries"]:
+            team = espn_map.get(entry["espnId"])
+            if not team:
+                continue
+            conf_abbrev = tc_map.get(team.id)
+            if not conf_abbrev:
+                continue
+
+            existing = session.query(ConferenceStanding).filter(
+                ConferenceStanding.season == SEASON,
+                ConferenceStanding.team_id == team.id,
+            ).first()
+
+            if existing:
+                row = existing
+            else:
+                row = ConferenceStanding(
+                    season=SEASON, gender=gender,
+                    conf_abbrev=conf_abbrev, team_id=team.id,
+                )
+                session.add(row)
+
+            row.conf_seed = entry["confSeed"]
+            row.conf_wins = entry["confWins"]
+            row.conf_losses = entry["confLosses"]
+            row.conf_win_pct = entry["confWinPct"]
+            row.overall_wins = entry["overallWins"]
+            row.overall_losses = entry["overallLosses"]
+            row.overall_win_pct = entry["overallWinPct"]
+            row.home_wins = entry["homeWins"]
+            row.home_losses = entry["homeLosses"]
+            row.away_wins = entry["awayWins"]
+            row.away_losses = entry["awayLosses"]
+            row.streak = entry["streak"]
+            row.games_behind = entry["gamesBehind"]
+            row.avg_points_for = entry["avgPointsFor"]
+            row.avg_points_against = entry["avgPointsAgainst"]
+            row.point_differential = entry["pointDifferential"]
+            upserted += 1
+
+    session.flush()
+    return upserted
+
+
 def run():
     today = datetime.now()
     yesterday = today - timedelta(days=1)
@@ -348,7 +414,17 @@ def run():
                 session.rollback()
                 print(f"[{gender_label}] Power rating error: {e}")
 
-            # --- Stage 8: Lock today's predictions ---
+            # --- Stage 8: Refresh conference standings from ESPN ---
+            try:
+                standings_count = refresh_conference_standings(session, gender)
+                session.commit()
+                if standings_count > 0:
+                    print(f"[{gender_label}] Updated conference standings for {standings_count} teams")
+            except Exception as e:
+                session.rollback()
+                print(f"[{gender_label}] Conference standings error: {e}")
+
+            # --- Stage 9: Lock today's predictions ---
             try:
                 locked_count = lock_todays_predictions(session, gender)
                 session.commit()

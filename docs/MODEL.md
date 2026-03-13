@@ -68,6 +68,8 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
   - **Reweighted power ratings:** Efficiency-based metrics now comprise 75% of power rating (AdjEM 50% + Barthag 25%), up from 65%. Elo reduced to 5%, Win% to 5%. Rankings now align within 2 places of AP/KenPom for top teams.
   - **Rewritten matchup explanations:** `explain_matchup()` uses actual model feature differences instead of disconnected signal blend weights. Only reports factors where the favored team genuinely has the edge.
   - **Head-to-head investigated and rejected:** Season h2h record was tested as a feature but caused massive label leakage (Val Brier dropped to 0.042, accuracy jumped to 92.4% — clearly too good). Regular season series almost perfectly predicts conference tournament rematches. Removed from training; kept as explanation-only signal in live predictor.
+  - **Conference tournament confidence compression:** Post-calibration 0.85 compression for conf tourney games. Empirical data (268 games) showed the 70-75% confidence band hitting only 60.6%. Compression fixes calibration across all bands without retraining.
+  - **Conference standings from ESPN:** New `conference_standings` table stores within-conference rankings (seed, conf record, home/away splits, streak, PPG) for both M and W, refreshed daily from ESPN standings API.
 
 **Notebook:** `notebooks/generate_v4_notebook.py` (generates `Ubunifu_Madness_V5.ipynb`)
 
@@ -406,7 +408,16 @@ Raw ensemble probabilities are systematically miscalibrated — the model tends 
 prob = 0.5 + (prob - 0.5) * 0.80  # e.g., 0.70 → 0.66
 ```
 
-**V4/V5:** No manual compression needed. The model trains on all game types and has `is_conf_tourney` as a feature — it learns the compression itself.
+**V4:** No manual compression — the model trains on all game types and has `is_conf_tourney` as a feature.
+
+**V5:** Empirical calibration on 268 conference tournament games revealed the 70-75% confidence band was hitting only 60.6% (vs expected ~72%). Added a **post-calibration compression** of 0.85 for conference tournament games:
+
+```python
+if is_conf_tourney:
+    prob = 0.5 + (prob - 0.5) * 0.85  # e.g., 0.70 → 0.67, 0.90 → 0.84
+```
+
+This brings the worst-calibrated band (70-75%) from +11.1% overconfident to -1.7% (near perfect). The `is_conf_tourney` model feature handles structural differences; the compression handles residual overconfidence from single-elimination volatility.
 
 ## Step 7: Tossup Threshold
 
@@ -483,6 +494,7 @@ graph LR
     B -->|Elo update| D[(elo_ratings table)]
     B -->|W/L update| E[(team_season_stats)]
     B -->|Conf refresh| F[(conference_strength)]
+    G[ESPN Standings API] -->|Daily| H[(conference_standings)]
 ```
 
 The update is idempotent — running it multiple times for the same date skips already-processed games via deduplication against the `game_results` table.

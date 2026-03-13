@@ -11,6 +11,7 @@ from app.models.game_prediction import GamePrediction
 from app.models.player import Player, PlayerSeasonStats, PlayerGameLog
 from app.models.user import User
 from app.models.user_bracket import UserBracket
+from app.models.conference_standings import ConferenceStanding
 
 __all__ = [
     "Team",
@@ -21,6 +22,7 @@ __all__ = [
     "Prediction",
     "EloRating",
     "ConferenceStrength",
+    "ConferenceStanding",
     "TeamSeasonStats",
     "ModelArtifact",
     "GamePrediction",
