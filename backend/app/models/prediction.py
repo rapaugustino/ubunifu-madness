@@ -11,7 +11,7 @@ class Prediction(Base):
     team_a_id = Column(Integer, ForeignKey("teams.id"), nullable=False)  # lower ID
     team_b_id = Column(Integer, ForeignKey("teams.id"), nullable=False)  # higher ID
     win_prob_a = Column(Float, nullable=False)  # P(team_a wins)
-    model_version = Column(String(20), default="v2")
+    model_version = Column(String(20), default="v5")
     gender = Column(String(1), nullable=False)
 
     __table_args__ = (

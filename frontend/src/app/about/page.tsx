@@ -78,7 +78,7 @@ export default function AboutPage() {
         <h2 className="text-xl font-semibold mb-3">ML Ensemble Prediction System</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            Predictions are powered by a V4 ML ensemble model that builds features from live
+            Predictions are powered by a V5 ML ensemble model that builds features from live
             database state — Elo, efficiency, records, rankings — and outputs a calibrated win
             probability. The model is trained on 163,000+ games (regular season, conference
             tournaments, and NCAA tournaments from 2012–2025) using 40 features.
@@ -118,12 +118,13 @@ export default function AboutPage() {
 
       {/* ML Model */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold mb-3">V4 Model Details</h2>
+        <h2 className="text-xl font-semibold mb-3">V5 Model Details</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            The V4 model is an ensemble of Logistic Regression (37.8%) and LightGBM (62.2%),
+            The V5 model is an ensemble of Logistic Regression (37.8%) and LightGBM (62.2%),
             trained on 163,000+ men&apos;s and women&apos;s games from 2012–2025 across all game
-            types. It uses 40 features organized into nine categories:
+            types with recency-weighted training (5-season half-life — recent games matter ~7x more).
+            It uses 40 features organized into nine categories:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li><strong>Elo:</strong> Current rating, rating difference, expected win probability</li>

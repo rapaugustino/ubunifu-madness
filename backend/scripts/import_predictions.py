@@ -21,7 +21,7 @@ SUBMISSION_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "notebooks"
     / "submissions"
-    / "stage2_submission_v2.csv"
+    / "stage2_submission_v5.csv"
 )
 
 
@@ -34,7 +34,7 @@ def main():
 
     try:
         # Clear existing v2 predictions
-        deleted = session.query(Prediction).filter(Prediction.model_version == "v2").delete()
+        deleted = session.query(Prediction).filter(Prediction.model_version == "v5").delete()
         session.commit()
         if deleted:
             print(f"Cleared {deleted} existing v2 predictions")
@@ -60,7 +60,7 @@ def main():
                     team_a_id=team_a,
                     team_b_id=team_b,
                     win_prob_a=prob,
-                    model_version="v2",
+                    model_version="v5",
                     gender=gender,
                 )
             )

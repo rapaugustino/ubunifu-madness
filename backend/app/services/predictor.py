@@ -679,11 +679,15 @@ def predict_matchup(
 
                 prob = float(np.clip(raw, 0.02, 0.98))
 
-                # Conference tournament compression: empirical calibration shows
-                # the 70-75% band hits only ~61% in conf tourneys. Shrink toward
-                # 50% to reduce overconfidence in volatile postseason games.
+                # Gender-specific conference tournament compression.
+                # Empirical calibration on 270 conf tourney games:
+                # - Men (153 games): no compression needed (optimal ~1.0)
+                # - Women (117 games): mild compression (optimal ~0.90)
                 if is_conf_tourney:
-                    prob = 0.5 + (prob - 0.5) * 0.85
+                    gender = db.query(Team.gender).filter(Team.id == team_a_id).scalar()
+                    factor = 0.90 if gender == "W" else 1.0
+                    if factor < 1.0:
+                        prob = 0.5 + (prob - 0.5) * factor
 
                 return prob, "ml_ensemble"
         except Exception as e:
