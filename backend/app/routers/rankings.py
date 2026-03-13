@@ -19,27 +19,26 @@ def power_rankings(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    # Get all teams with Elo for this season+gender, ordered by Elo desc
+    # Get all teams with Elo for this season+gender, ordered by power rating desc (Elo as fallback)
     rows = (
-        db.query(Team, EloRating)
+        db.query(Team, EloRating, TeamSeasonStats)
         .join(EloRating, EloRating.team_id == Team.id)
+        .outerjoin(TeamSeasonStats, (TeamSeasonStats.team_id == Team.id) & (TeamSeasonStats.season == season))
         .filter(EloRating.season == season, Team.gender == gender)
-        .order_by(EloRating.elo.desc())
+        .order_by(
+            TeamSeasonStats.power_rating.desc().nullslast(),
+            EloRating.elo.desc(),
+        )
         .all()
     )
 
     total = len(rows)
     rows = rows[offset : offset + limit]
 
-    team_ids = [t.id for t, _ in rows]
+    team_ids = [t.id for t, _, _ in rows]
 
-    # Batch load
-    stats_map = {
-        r.team_id: r
-        for r in db.query(TeamSeasonStats)
-        .filter(TeamSeasonStats.season == season, TeamSeasonStats.team_id.in_(team_ids))
-        .all()
-    }
+    # Stats already loaded via join
+    stats_map = {s.team_id: s for _, _, s in rows if s}
     conf_map = {
         r.team_id: r.conf_abbrev
         for r in db.query(TeamConference)
@@ -66,7 +65,7 @@ def power_rankings(
     conf_names = {r.abbrev: r.description for r in db.query(Conference).all()}
 
     rankings = []
-    for i, (team, elo_row) in enumerate(rows):
+    for i, (team, elo_row, _stats_row) in enumerate(rows):
         stats = stats_map.get(team.id)
         conf_abbrev = conf_map.get(team.id, "")
         conf_name = conf_names.get(conf_abbrev, conf_abbrev)
@@ -126,6 +125,7 @@ def power_rankings(
             "pythWinPct": stats.pyth_win_pct if stats else None,
             "tempo": stats.avg_tempo if stats else None,
             "sos": stats.sos if stats else None,
+            "powerRating": round(stats.power_rating, 1) if stats and stats.power_rating else None,
         })
 
     return {"rankings": rankings, "total": total}

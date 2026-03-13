@@ -12,7 +12,8 @@ Pipeline:
 5. SOS refresh
 6. Advanced stats (adjusted efficiency, luck, etc.)
 7. Record reconciliation from ESPN
-8. Lock today's predictions (consistent pre-game state)
+8. Composite power ratings (Elo + AdjEM + record + SOS + momentum + Barthag)
+9. Lock today's predictions (consistent pre-game state)
 
 Run from backend/:
     python3 -m scripts.cron_elo_update
@@ -41,6 +42,67 @@ from app.services.predictor import predict_matchup
 
 
 SEASON = 2026
+
+
+def compute_power_ratings(session, gender: str) -> int:
+    """Compute composite power ratings blending Elo, AdjEM, record, SOS, momentum, Barthag."""
+    rows = (
+        session.query(TeamSeasonStats, EloRating)
+        .join(EloRating, (EloRating.team_id == TeamSeasonStats.team_id) & (EloRating.season == TeamSeasonStats.season))
+        .join(Team, Team.id == TeamSeasonStats.team_id)
+        .filter(TeamSeasonStats.season == SEASON, Team.gender == gender)
+        .all()
+    )
+    if not rows:
+        return 0
+
+    # Collect raw values
+    data = []
+    for stats, elo in rows:
+        total = (stats.wins or 0) + (stats.losses or 0)
+        data.append({
+            "stats": stats,
+            "elo": elo.elo,
+            "adj_net_eff": stats.adj_net_eff or 0,
+            "win_pct": stats.wins / total if total > 10 else None,
+            "sos": stats.sos or 0,
+            "momentum": stats.last_n_winpct,
+            "barthag": stats.barthag or 0,
+        })
+
+    def _pctile_rank(values):
+        valid = [(i, v) for i, v in enumerate(values) if v is not None]
+        if not valid:
+            return [0.5] * len(values)
+        sorted_vals = sorted(set(v for _, v in valid))
+        rank_map = {v: i / max(len(sorted_vals) - 1, 1) for i, v in enumerate(sorted_vals)}
+        return [rank_map.get(v, 0.5) if v is not None else None for v in values]
+
+    pctiles = {
+        "elo": _pctile_rank([d["elo"] for d in data]),
+        "aem": _pctile_rank([d["adj_net_eff"] for d in data]),
+        "wpct": _pctile_rank([d["win_pct"] for d in data]),
+        "sos": _pctile_rank([d["sos"] for d in data]),
+        "mom": _pctile_rank([d["momentum"] for d in data]),
+        "barthag": _pctile_rank([d["barthag"] for d in data]),
+    }
+
+    weights = {"elo": 0.25, "aem": 0.20, "wpct": 0.20, "sos": 0.10, "mom": 0.15, "barthag": 0.10}
+
+    updated = 0
+    for i, d in enumerate(data):
+        total_weight = 0
+        weighted_sum = 0
+        for key, weight in weights.items():
+            val = pctiles[key][i]
+            if val is not None:
+                weighted_sum += val * weight
+                total_weight += weight
+        power = (weighted_sum / total_weight) * 100 if total_weight > 0 else 50.0
+        d["stats"].power_rating = round(power, 1)
+        updated += 1
+
+    return updated
 
 
 def lock_todays_predictions(session, gender: str) -> int:
@@ -274,7 +336,17 @@ def run():
                 session.rollback()
                 print(f"[{gender_label}] Record reconciliation error: {e}")
 
-            # --- Stage 7: Lock today's predictions ---
+            # --- Stage 7: Compute power ratings ---
+            try:
+                pr_count = compute_power_ratings(session, gender)
+                session.commit()
+                if pr_count > 0:
+                    print(f"[{gender_label}] Computed power ratings for {pr_count} teams")
+            except Exception as e:
+                session.rollback()
+                print(f"[{gender_label}] Power rating error: {e}")
+
+            # --- Stage 8: Lock today's predictions ---
             try:
                 locked_count = lock_todays_predictions(session, gender)
                 session.commit()

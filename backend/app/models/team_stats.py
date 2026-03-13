@@ -79,6 +79,9 @@ class TeamSeasonStats(Base):
     coach_tourney_appearances = Column(Integer, nullable=True)
     coach_march_winrate = Column(Float, nullable=True)
 
+    # Composite power rating (blended ranking score)
+    power_rating = Column(Float, nullable=True)
+
     team = relationship("Team", back_populates="season_stats")
 
     __table_args__ = (

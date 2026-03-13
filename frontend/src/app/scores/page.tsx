@@ -409,7 +409,43 @@ export default function ScoresPage() {
       </div>
 
       {loading ? (
-        <div className="text-center text-muted py-20">Loading scores...</div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-card border border-card-border rounded-xl p-4 animate-pulse">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="h-3 w-16 bg-white/10 rounded" />
+                  <div className="h-3 w-12 bg-white/10 rounded" />
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-6 h-6 rounded bg-white/10" />
+                      <div>
+                        <div className="h-4 w-36 bg-white/10 rounded mb-1" />
+                        <div className="h-2.5 w-20 bg-white/10 rounded" />
+                      </div>
+                    </div>
+                    <div className="h-5 w-8 bg-white/10 rounded" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-6 h-6 rounded bg-white/10" />
+                      <div>
+                        <div className="h-4 w-32 bg-white/10 rounded mb-1" />
+                        <div className="h-2.5 w-20 bg-white/10 rounded" />
+                      </div>
+                    </div>
+                    <div className="h-5 w-8 bg-white/10 rounded" />
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-card-border">
+                  <div className="h-1.5 w-full bg-white/5 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : games.length === 0 ? (
         <div className="text-center text-muted py-20">No games scheduled for this date.</div>
       ) : (

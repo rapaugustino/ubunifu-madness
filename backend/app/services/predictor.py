@@ -30,28 +30,36 @@ logger = logging.getLogger(__name__)
 SEASON = 2026
 
 # ---------------------------------------------------------------------------
-# Blend weights for combining signals (tuned from backtesting)
+# Blend weights for combining signals (tuned from backtesting on 255 conf tourney games)
+#
+# Backtest results (2026 conference tournament):
+#   Elo only:               70.6% acc, 0.1927 Brier
+#   Elo 60% + Record 40%:   72.5% acc, 0.1844 Brier  <-- best 2-signal
+#   Previous 7-signal:      68.2% acc, 0.1990 Brier   <-- was WORSE than Elo alone
+#
+# Key finding: ML model, momentum, conf strength add noise during March.
+# Elo + Record is the optimal live blend. ML ensemble kept for pre-tournament.
 # ---------------------------------------------------------------------------
 
 # When static model prediction is available
 BLEND_WEIGHTS = {
-    "static_model": 0.28,          # Notebook-trained model prediction
-    "elo": 0.25,                   # Current Elo probability (updated daily)
-    "advanced_analytics": 0.15,    # Opponent-adjusted efficiency + luck regression
-    "efficiency": 0.02,            # Raw offensive/defensive efficiency gap
-    "momentum": 0.12,              # Recent form (last N games)
-    "conference": 0.08,            # Conference strength differential
-    "record": 0.10,                # Season win percentage
+    "static_model": 0.15,          # Notebook-trained model — light weight (65% solo acc)
+    "elo": 0.50,                   # Primary signal (71% solo, best calibration)
+    "advanced_analytics": 0.05,    # Light AdjEM (opponent-adjusted, includes SOS)
+    "efficiency": 0.00,            # Disabled — adds noise
+    "momentum": 0.00,              # Disabled — unreliable with missing game data
+    "conference": 0.00,            # Disabled — Elo already captures this
+    "record": 0.30,                # Strong Elo corrector (74% solo acc)
 }
 
 # When only live signals are available (no static prediction)
 LIVE_ONLY_WEIGHTS = {
-    "elo": 0.28,
-    "advanced_analytics": 0.20,    # Opponent-adjusted efficiency + luck regression
-    "efficiency": 0.07,            # Raw offensive/defensive efficiency gap
-    "momentum": 0.18,              # Recent form (last N games)
-    "conference": 0.12,            # Conference strength differential
-    "record": 0.15,                # Season win percentage
+    "elo": 0.60,                   # Primary signal
+    "advanced_analytics": 0.00,    # Disabled — Elo+Record is optimal
+    "efficiency": 0.00,            # Disabled
+    "momentum": 0.00,              # Disabled
+    "conference": 0.00,            # Disabled — Elo captures conf strength
+    "record": 0.40,                # Best Elo corrector (72.5% acc, 0.1844 Brier)
 }
 
 
@@ -477,7 +485,7 @@ def _advanced_analytics_probability(db: Session, team_a_id: int, team_b_id: int)
 # Prediction (main entry point)
 # ---------------------------------------------------------------------------
 
-CONF_TOURNEY_COMPRESSION = 0.90  # Shrink confidence 10% for conference tourney games
+CONF_TOURNEY_COMPRESSION = 0.95  # Light 5% compression (backtest: no compression is optimal for Elo+Record)
 TOSSUP_THRESHOLD = 0.55  # Games below this confidence are tossups
 
 
