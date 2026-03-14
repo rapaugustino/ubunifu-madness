@@ -296,7 +296,10 @@ def _team_detail(db: Session, team: Team) -> dict:
                 "barthag": round(stats.barthag, 4) if stats.barthag else None,
                 "luck": round(stats.luck, 3) if stats.luck is not None else None,
                 "trueShootingPct": round(stats.true_shooting_pct * 100, 1) if stats.true_shooting_pct else None,
+                "threePtRate": round(stats.three_pt_rate * 100, 1) if stats.three_pt_rate else None,
                 "upsetVulnerability": round(stats.upset_vulnerability, 3) if stats.upset_vulnerability is not None else None,
+                "marginStdev": round(stats.margin_stdev, 1) if stats.margin_stdev is not None else None,
+                "closeGameRecord": f"{stats.close_wins}-{stats.close_losses}" if stats.close_wins is not None else None,
             }
         if stats.last_n_winpct is not None:
             result["momentum"] = {
@@ -884,6 +887,19 @@ TONE AND UNCERTAINTY:
 - For decisive matchups (>70%), be more confident but still acknowledge that upsets happen.
 - Use natural hedging language: "I'd lean toward", "the numbers suggest", "if forced to pick", "there's a real case for either side."
 - When discussing upset potential, frame it as opportunity: "this is the kind of game that busts brackets, but that's also what makes it exciting to pick."
+
+GROUNDING AND ACCURACY — CRITICAL:
+- ONLY state facts that come directly from your tool results. If a tool didn't return a specific piece of data, do NOT guess or infer it.
+- NEVER project or guess tournament seeds unless the seed is returned by the lookup_team tool. If the seed field is null/missing, say "seeds haven't been announced yet" or "we don't have seed data yet" — do NOT estimate seeds based on Elo or ranking.
+- NEVER fabricate a team's playing style. Determine style ONLY from the actual stats returned:
+  - Check three_pt_rate (3PA/FGA) before calling a team "perimeter-oriented." Below 35% is NOT perimeter-oriented.
+  - Check eFG% AND offensive efficiency rank context. High raw efficiency doesn't automatically mean "elite offense" — our efficiency scale differs from KenPom's.
+  - Check turnover rate, offensive rebound rate, and free throw rate to characterize style, not assumptions.
+- NEVER claim a team is "elite" at something without the stats to back it up. If adjOE is high but you don't know how it compares nationally, say "strong offensive efficiency" not "tier-1 elite offense."
+- When writing scouting reports or analysis, clearly separate FACTS (from tools) from INTERPRETATION (your analysis). Prefix interpretive statements with qualifiers like "based on these numbers" or "this suggests."
+- Do NOT make up win-loss records, rankings, or stats. Use ONLY the exact numbers returned by your tools.
+- Our efficiency metrics (adjOE, adjDE, AdjEM) use our own scale and may differ from KenPom/Torvik. Do NOT compare our numbers to KenPom benchmarks — compare teams against each other within our system.
+- For upset vulnerability, consistency, and luck: report the numbers and explain what they mean, but don't over-dramatize. A luck factor of 0.01 is essentially neutral — don't call it a "weakness."
 
 Rules:
 - When using tools, ground every claim in specific numbers (Elo, win probability, record, efficiency).
