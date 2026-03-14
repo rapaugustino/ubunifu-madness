@@ -35,10 +35,10 @@ def r(val, digits=2):
         return None
     return float(round(val, digits))
 
-# Elo config (from V2 Optuna tuning)
-K_FACTOR = 21.8
-HOME_ADV = 101.9
-SEASON_REGRESSION = 0.89
+# Elo config (V5 Optuna tuning)
+K_FACTOR = 19.6
+HOME_ADV = 90.9
+SEASON_REGRESSION = 0.950
 MEAN_ELO = 1500
 
 TARGET_SEASON = 2026

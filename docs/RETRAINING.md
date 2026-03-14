@@ -53,7 +53,7 @@ python3 -m scripts.compute_stats
 2. Computes Elo ratings for every team at end-of-season (snapshot_day=154)
 3. Calculates conference strength metrics (avg_elo, nc_winrate, tourney history)
 4. Computes team season stats for the current season (Four Factors, efficiency, Massey, momentum, coach, SOS)
-5. Runs `compute_advanced_stats()` which computes opponent-adjusted efficiency (AdjOE/AdjDE/AdjEM via 10-iteration algorithm with home court adjustment ±3.5), Barthag, Pythagorean win % and luck, consistency metrics (margin stdev, efficiency stdev), floor/ceiling (10th/90th percentile net efficiency), and upset vulnerability index for all teams
+5. Runs `compute_advanced_stats()` which computes opponent-adjusted efficiency (AdjOE/AdjDE/AdjEM via up to 25 iterations with convergence detection and home court adjustment ±3.5), Barthag, Pythagorean win % and luck, consistency metrics (margin stdev, efficiency stdev), floor/ceiling (10th/90th percentile net efficiency), and upset vulnerability index for all teams
 
 **Output:**
 - `elo_ratings` table: ~15,000 rows (all teams, all seasons)
@@ -211,9 +211,9 @@ curl -X POST "http://localhost:8000/api/elo/refresh?gender=W"
 4. Player stats refresh
 5. SOS (strength of schedule) recomputation
 6. Advanced stats recomputation (AdjOE/AdjDE/AdjEM with home court adjustment, Barthag, luck, consistency, floor/ceiling, upset vulnerability)
-7. Power ratings recomputation (AdjEM 50%, Barthag 25%, SOS 10%, Elo 5%, Win% 5%, Momentum 5%)
+7. Power ratings recomputation (AdjEM 35%, Elo 25%, SOS 15%, Barthag 15%, Win% 5%, Momentum 5%)
 8. Conference standings refresh from ESPN (within-conference rankings, seeds, records, home/away splits)
-9. Lock predictions for upcoming games (with conf tourney compression: 0.85 factor)
+9. Lock predictions for upcoming games (with gender-specific conf tourney compression: women 0.90, men 1.0)
 
 ## Troubleshooting
 

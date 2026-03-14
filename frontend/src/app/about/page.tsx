@@ -16,8 +16,8 @@ export default function AboutPage() {
             Every team starts at 1500. After each game, the winner gains points and the loser
             drops by the same amount. How many points depends on three things: how likely the
             win was (upsets move the needle more), the margin of victory, and whether the game
-            was at home or away. We apply a 101.9-point home court advantage and use a K-factor
-            of 21.8 — tuned via Optuna optimization to balance responsiveness with stability.
+            was at home or away. We apply a 90.9-point home court advantage and use a K-factor
+            of 19.6 — tuned via Optuna optimization to balance responsiveness with stability.
           </p>
           <p>
             Between seasons, every team&apos;s rating regresses 5% toward 1500. This prevents
