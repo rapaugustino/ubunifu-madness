@@ -87,9 +87,10 @@ def compute_power_ratings(session, gender: str) -> int:
         "barthag": _pctile_rank([d["barthag"] for d in data]),
     }
 
-    # Weights: AdjEM-heavy to align with KenPom/NET. Barthag is derived from AdjEM.
-    # AdjEM 50% + Barthag 25% = 75% efficiency-based (like KenPom), rest for context.
-    weights = {"elo": 0.05, "aem": 0.50, "wpct": 0.05, "sos": 0.10, "mom": 0.05, "barthag": 0.25}
+    # Weights: AdjEM primary, Elo gives full-season trajectory (our top V5 feature),
+    # SOS rewards tough schedules, Barthag reduced (correlated with AdjEM).
+    # 50% efficiency-based (AdjEM+Barthag), 25% Elo, 15% SOS, 10% context.
+    weights = {"elo": 0.25, "aem": 0.35, "wpct": 0.05, "sos": 0.15, "mom": 0.05, "barthag": 0.15}
 
     updated = 0
     for i, d in enumerate(data):

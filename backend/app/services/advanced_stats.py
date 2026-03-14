@@ -15,7 +15,8 @@ from app.models import TeamSeasonStats, GameResult
 
 PYTH_EXPONENT = 9       # Sports-Reference uses 9 for CBB
 BARTHAG_EXPONENT = 11.5  # BartTorvik's Pythagorean exponent for efficiency
-ADJ_ITERATIONS = 10      # Iterations for adjusted efficiency convergence
+ADJ_MAX_ITERATIONS = 25  # Max iterations for adjusted efficiency (was 10)
+ADJ_CONVERGENCE = 0.01   # Stop when max change < this (efficiency points)
 HOME_COURT_ADJ = 3.5     # KenPom-style home court advantage (eff pts per 100 poss)
 
 
@@ -191,10 +192,13 @@ def compute_advanced_stats(session, season: int, gender: str = None):
         nat_avg_de = np.mean(list(raw_de.values()))
 
         # --- Adjusted Efficiency (iterative opponent adjustment) ---
+        # KenPom-style: repeatedly adjust each team's efficiency by opponent
+        # strength until values converge. More iterations = better propagation
+        # of strength through transitive schedule chains.
         adj_oe = dict(raw_oe)
         adj_de = dict(raw_de)
 
-        for _ in range(ADJ_ITERATIONS):
+        for iteration in range(ADJ_MAX_ITERATIONS):
             new_adj_oe = {}
             new_adj_de = {}
             for tid, games_list in team_games.items():
@@ -220,8 +224,19 @@ def compute_advanced_stats(session, season: int, gender: str = None):
                 new_adj_oe[tid] = np.average(adj_oe_games, weights=poss_arr)
                 new_adj_de[tid] = np.average(adj_de_games, weights=poss_arr)
 
+            # Check convergence: stop when max change is negligible
+            max_delta = 0
+            for tid in new_adj_oe:
+                if tid in adj_oe:
+                    max_delta = max(max_delta, abs(new_adj_oe[tid] - adj_oe[tid]))
+                if tid in adj_de:
+                    max_delta = max(max_delta, abs(new_adj_de[tid] - adj_de[tid]))
+
             adj_oe = new_adj_oe
             adj_de = new_adj_de
+
+            if max_delta < ADJ_CONVERGENCE:
+                break
 
         # --- Update TeamSeasonStats ---
         stats_rows = (
