@@ -5,7 +5,7 @@ This enables the ml_ensemble prediction path in predictor.py, which builds
 features from LIVE DB state instead of using stale CSV predictions.
 
 Run from backend/:
-    python -m scripts.upload_model_artifacts [--version v3] [--artifact-dir ../notebooks/artifacts]
+    python -m scripts.upload_model_artifacts [--version v5] [--artifact-dir ../notebooks/artifacts]
 """
 
 import argparse
@@ -24,7 +24,7 @@ DEFAULT_ARTIFACT_DIR = Path(__file__).resolve().parent.parent.parent / "notebook
 
 def main():
     parser = argparse.ArgumentParser(description="Upload model artifacts to DB")
-    parser.add_argument("--version", default="v3", help="Model version label (default: v3)")
+    parser.add_argument("--version", default="v5", help="Model version label (default: v5)")
     parser.add_argument("--artifact-dir", type=Path, default=DEFAULT_ARTIFACT_DIR,
                         help="Directory containing joblib files and metadata JSON")
     args = parser.parse_args()

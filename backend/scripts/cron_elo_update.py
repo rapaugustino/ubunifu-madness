@@ -1,5 +1,5 @@
 """
-Daily update cron job — Elo ratings, player stats, and prediction locking.
+Daily update cron job: Elo ratings, player stats, and prediction locking.
 
 Processes yesterday's and today's completed games for both Men's and Women's.
 Designed to run once daily (e.g., 6 AM via cron or Railway scheduled service).
@@ -333,8 +333,8 @@ def run():
                     for ch in result["changes"]:
                         w = ch["winner"]
                         loser = ch["loser"]
-                        print(f"  {ch['game']}: {w['name']} {w['elo_before']:.1f}→{w['elo_after']:.1f}, "
-                              f"{loser['name']} {loser['elo_before']:.1f}→{loser['elo_after']:.1f}")
+                        print(f"  {ch['game']}: {w['name']} {w['elo_before']:.1f} -> {w['elo_after']:.1f}, "
+                              f"{loser['name']} {loser['elo_before']:.1f} -> {loser['elo_after']:.1f}")
 
             if total_processed > 0:
                 conf_updated = refresh_conference_strength(session, gender)

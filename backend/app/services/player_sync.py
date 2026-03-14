@@ -1,4 +1,4 @@
-"""Player data sync service — roster + box score ingestion from ESPN.
+"""Player data sync service: roster and box score ingestion from ESPN.
 
 Responsibilities:
 1. Sync team rosters (players table) from ESPN

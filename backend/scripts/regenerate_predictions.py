@@ -92,7 +92,7 @@ def main():
     print(f"\nDeleted {deleted} old predictions.")
 
     # Step 3: Regenerate by fetching each date from ESPN
-    # Build ESPN→Kaggle maps
+    # Build ESPN-to-Kaggle ID maps
     genders = [args.gender] if args.gender else ["M", "W"]
 
     # Build date range from cutoff to today

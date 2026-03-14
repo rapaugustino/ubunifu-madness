@@ -441,9 +441,6 @@ def get_tournament_teams(gender: str = "M") -> list[dict]:
             espn_id = int(t["id"])
             if espn_id in teams:
                 continue
-            # Check for tournament seed in notes
-            seed = None
-            # Try to get seed from competitor
             seed = c.get("seed")
 
             logos = t.get("logos", [])

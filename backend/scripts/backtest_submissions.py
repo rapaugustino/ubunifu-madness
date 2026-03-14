@@ -288,7 +288,7 @@ def main():
         # Side-by-side comparison
         if len(all_results) > 1:
             print(f"\n{'='*80}")
-            print("  COMPARISON (Stage 1 — all versions)")
+            print("  COMPARISON (Stage 1 - all versions)")
             print(f"{'='*80}")
             print(f"  {'Version':<35} {'Brier':>7} {'LogLoss':>8} {'Acc':>6} {'Games':>6}")
             print(f"  {'-'*70}")

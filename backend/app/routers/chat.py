@@ -1,5 +1,5 @@
 """
-Madness Agent — AI bracket advisor with tool-use.
+Madness Agent: AI bracket advisor with tool-use.
 
 The agent can look up any team, get matchup predictions, query conference
 strength, pull top rankings, and check live scores. Claude decides which
@@ -32,7 +32,7 @@ router = APIRouter(tags=["chat"])
 
 SEASON = 2026
 
-# Common user abbreviations → Kaggle DB conference abbreviations
+# Common user abbreviations mapped to Kaggle DB conference abbreviations
 _CONF_ALIAS_MAP = {
     "B10": "big_ten", "BIG10": "big_ten", "BIG 10": "big_ten", "BIG TEN": "big_ten",
     "B12": "big_twelve", "BIG12": "big_twelve", "BIG 12": "big_twelve", "BIG TWELVE": "big_twelve",

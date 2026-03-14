@@ -15,7 +15,7 @@ from app.models import TeamSeasonStats, GameResult
 
 PYTH_EXPONENT = 9       # Sports-Reference uses 9 for CBB
 BARTHAG_EXPONENT = 11.5  # BartTorvik's Pythagorean exponent for efficiency
-ADJ_MAX_ITERATIONS = 25  # Max iterations for adjusted efficiency (was 10)
+ADJ_MAX_ITERATIONS = 25  # Max iterations for adjusted efficiency
 ADJ_CONVERGENCE = 0.01   # Stop when max change < this (efficiency points)
 HOME_COURT_ADJ = 3.5     # KenPom-style home court advantage (eff pts per 100 poss)
 
