@@ -51,7 +51,7 @@ def fetch_espn_teams(gender: str) -> list[dict]:
 
 
 def load_spellings(gender: str) -> dict[str, int]:
-    """Load team name spelling variants → Kaggle ID."""
+    """Load team name spelling variants -> Kaggle ID."""
     prefix = "M" if gender == "M" else "W"
     path = f"{DATA_DIR}/{prefix}TeamSpellings.csv"
     spellings = {}
@@ -82,7 +82,7 @@ def match_teams(gender: str) -> dict[int, dict]:
     spellings = load_spellings(gender)
     kaggle = load_kaggle_teams(gender)
 
-    # Build ESPN lookup: normalized name → team info
+    # Build ESPN lookup: normalized name -> team info
     espn_lookup = {}
     for t in espn_teams:
         for key in [t["displayName"], t["location"], t["nickname"], t["shortDisplayName"]]:

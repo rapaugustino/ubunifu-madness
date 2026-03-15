@@ -59,7 +59,7 @@ def _game_already_exists(session: Session, season: int, w_id: int, l_id: int, w_
 
 
 def _get_espn_to_kaggle_map(session: Session, gender: str) -> dict[int, Team]:
-    """Build ESPN ID → Team mapping."""
+    """Build ESPN ID -> Team mapping."""
     return {
         t.espn_id: t
         for t in session.query(Team).filter(
@@ -221,7 +221,7 @@ def refresh_conference_strength(session: Session, gender: str):
 
     elo_map = _load_current_elo(session)
 
-    # Load team → conference mapping (use Team.gender, not ID heuristic)
+    # Load team -> conference mapping (use Team.gender, not ID heuristic)
     team_gender_map = {
         t.id: t.gender
         for t in session.query(Team).filter(Team.gender == gender).all()
@@ -309,8 +309,8 @@ def main():
             for ch in result["changes"]:
                 w = ch["winner"]
                 loser = ch["loser"]
-                print(f"  {ch['game']}: {w['name']} {w['elo_before']:.1f}→{w['elo_after']:.1f} (+{ch['update']}), "
-                      f"{loser['name']} {loser['elo_before']:.1f}→{loser['elo_after']:.1f} (-{ch['update']})")
+                print(f"  {ch['game']}: {w['name']} {w['elo_before']:.1f}->{w['elo_after']:.1f} (+{ch['update']}), "
+                      f"{loser['name']} {loser['elo_before']:.1f}->{loser['elo_after']:.1f} (-{ch['update']})")
 
             total_processed += result["games_processed"]
 

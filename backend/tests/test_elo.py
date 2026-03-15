@@ -128,8 +128,8 @@ class TestComputeEloRatings:
         elo_away = compute_elo_ratings(df_away)[(2025, 101)]
         elo_neut = compute_elo_ratings(df_neut)[(2025, 101)]
 
-        # Winning at home (favored) → least Elo gain
-        # Winning away (underdog) → most Elo gain
+        # Winning at home (favored) -> least Elo gain
+        # Winning away (underdog) -> most Elo gain
         assert elo_away > elo_neut > elo_home
 
     def test_season_regression(self):
@@ -148,7 +148,7 @@ class TestComputeEloRatings:
         assert elo_2025 == pytest.approx(expected_regressed, abs=0.01)
 
     def test_margin_of_victory_matters(self):
-        """Bigger margin of victory → more Elo gained."""
+        """Bigger margin of victory -> more Elo gained."""
         df_close = pd.DataFrame([self._make_game(2025, 1, 101, 71, 102, 70)])
         df_blowout = pd.DataFrame([self._make_game(2025, 1, 101, 100, 102, 60)])
 

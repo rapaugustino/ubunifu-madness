@@ -16,7 +16,7 @@ router = APIRouter(tags=["players"])
 
 SEASON = 2026
 
-# Leaderboard category → (sort column or expression, display label)
+# Leaderboard category -> (sort column or expression, display label)
 _LEADERBOARD_CATEGORIES = {
     "ppg", "rpg", "apg", "mpg",
     "fg_pct", "fg3_pct", "ft_pct",
@@ -252,7 +252,7 @@ def full_sync(
     gender: str = Query("M", pattern="^(M|W)$"),
     db: Session = Depends(get_db),
 ):
-    """Full pipeline: sync rosters → ingest box scores → recompute stats → compute importance.
+    """Full pipeline: sync rosters -> ingest box scores -> recompute stats -> compute importance.
 
     This is the daily cron endpoint. Call it with yesterday's date.
     """

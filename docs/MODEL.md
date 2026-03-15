@@ -322,7 +322,7 @@ Higher values indicate greater upset vulnerability. This metric is exclusive to 
 | Tempo | Possessions per game (pace of play) |
 | SOS | Strength of schedule (average opponent Elo) |
 
-> **V5 Update:** AdjEM, Barthag, and quality win % are model features alongside game context flags and external rankings. Power ratings now weight AdjEM (50%) + Barthag (25%) = 75% efficiency-based, with Elo (5%), Win% (5%), SOS (10%), Momentum (5%).
+**V5 Update:** AdjEM, Barthag, and quality win % are model features alongside game context flags and external rankings. Power ratings weight AdjEM (35%) + Elo (25%) + SOS (15%) + Barthag (15%) + Win% (5%) + Momentum (5%). Efficiency-based metrics (AdjEM + Barthag) account for 50% of the composite, with Elo elevated to 25% as our top single predictive feature.
 
 ## Step 3: Model Training
 
@@ -384,11 +384,11 @@ Raw ensemble probabilities are systematically miscalibrated — the model tends 
 **Fix:** Smooth calibration via linear interpolation between step midpoints. Instead of a piecewise-constant function, we use a piecewise-linear function that preserves the calibrator's overall mapping while producing continuous, unique outputs.
 
 ```python
-# Step function: raw 0.226 → 0.2451, raw 0.311 → 0.2451 (same!)
-# Smooth:       raw 0.226 → 0.2167, raw 0.311 → 0.2733 (unique!)
+# Step function: raw 0.226 --> 0.2451, raw 0.311 --> 0.2451 (same!)
+# Smooth:       raw 0.226 --> 0.2167, raw 0.311 --> 0.2733 (unique!)
 ```
 
-**Result:** 15/50 unique predictions → 50/50 unique predictions, while maintaining calibration accuracy.
+**Result:** 15/50 unique predictions --> 50/50 unique predictions, while maintaining calibration accuracy.
 
 **Alternative considered:** Platt scaling (logistic) wouldn't cluster but can't capture non-linear miscalibration patterns. Our approach gets the best of both.
 
@@ -405,19 +405,22 @@ Raw ensemble probabilities are systematically miscalibrated — the model tends 
 **V3 Fix:** For conference tournament games, compress predictions 20% toward 0.5:
 
 ```python
-prob = 0.5 + (prob - 0.5) * 0.80  # e.g., 0.70 → 0.66
+prob = 0.5 + (prob - 0.5) * 0.80  # e.g., 0.70 --> 0.66
 ```
 
 **V4:** No manual compression — the model trains on all game types and has `is_conf_tourney` as a feature.
 
-**V5:** Empirical calibration on 268 conference tournament games revealed the 70-75% confidence band was hitting only 60.6% (vs expected ~72%). Added a **post-calibration compression** of 0.85 for conference tournament games:
+**V5:** Empirical calibration on 270 conference tournament games revealed gender-specific miscalibration. Women's conf tourney predictions were overconfident; men's were already well-calibrated. Added **gender-specific post-calibration compression**:
 
 ```python
 if is_conf_tourney:
-    prob = 0.5 + (prob - 0.5) * 0.85  # e.g., 0.70 → 0.67, 0.90 → 0.84
+    gender = get_team_gender(team_a_id)
+    factor = 0.90 if gender == "W" else 1.0  # women compress 10%, men no change
+    if factor < 1.0:
+        prob = 0.5 + (prob - 0.5) * factor
 ```
 
-This brings the worst-calibrated band (70-75%) from +11.1% overconfident to -1.7% (near perfect). The `is_conf_tourney` model feature handles structural differences; the compression handles residual overconfidence from single-elimination volatility.
+The `is_conf_tourney` model feature handles structural differences; the women's compression handles residual overconfidence from higher single-elimination volatility in women's conference tournaments.
 
 ## Step 7: Tossup Threshold
 

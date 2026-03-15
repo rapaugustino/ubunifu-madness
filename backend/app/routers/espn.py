@@ -16,7 +16,7 @@ SEASON = 2026
 
 
 def _espn_to_kaggle_map(db: Session, gender: str | None = None) -> dict[int, Team]:
-    """Build espn_id → Team lookup."""
+    """Build espn_id -> Team lookup."""
     q = db.query(Team).filter(Team.espn_id.isnot(None))
     if gender:
         q = q.filter(Team.gender == gender)

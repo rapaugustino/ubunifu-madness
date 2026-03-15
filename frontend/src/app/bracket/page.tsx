@@ -547,7 +547,7 @@ export default function BracketPage() {
 
     if (bracket.champion) {
       text += `${"═".repeat(60)}\n`;
-      text += `  🏆 NATIONAL CHAMPION: ${bracket.champion.name}\n`;
+      text += `  NATIONAL CHAMPION: ${bracket.champion.name}\n`;
       text += `${"═".repeat(60)}\n`;
     }
 

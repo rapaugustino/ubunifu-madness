@@ -57,7 +57,7 @@ Get full team details including stats, conference context.
 
 ### `GET /rankings/power`
 
-Power rankings sorted by Elo rating.
+Power rankings sorted by composite power rating (AdjEM 35%, Elo 25%, SOS 15%, Barthag 15%, Win% 5%, Momentum 5%).
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -204,7 +204,7 @@ Get head-to-head win probability.
   "teamB": { "id": 1211, "name": "Illinois" },
   "winProbA": 0.634,
   "winProbB": 0.366,
-  "modelVersion": "v2"
+  "modelVersion": "v5"
 }
 ```
 

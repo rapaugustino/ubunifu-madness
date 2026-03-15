@@ -97,8 +97,8 @@ The notebook runs in 7 parts:
 # Submit Stage 2 predictions (after Selection Sunday)
 kaggle competitions submit \
   -c march-machine-learning-mania-2025 \
-  -f submissions/stage2_submission_v3_modern.csv \
-  -m "Stage 2 - V3 modern era LR+LGB ensemble"
+  -f submissions/stage2_submission_v5.csv \
+  -m "Stage 2 - V5 LR+LGB ensemble with recency weighting"
 ```
 
 **Stage 1 vs Stage 2:**
@@ -131,7 +131,7 @@ python3 -m scripts.load_predictions ../submissions/stage2_submission_v5.csv
 
 **What it does:**
 1. Clears existing predictions from the `predictions` table
-2. Parses each row: `SEASON_TEAMAID_TEAMBID` → season, team_a_id, team_b_id
+2. Parses each row: `SEASON_TEAMAID_TEAMBID` -> season, team_a_id, team_b_id
 3. Infers gender from team_a_id (< 3000 = Men's, >= 3000 = Women's)
 4. Bulk inserts predictions in batches of 10,000
 

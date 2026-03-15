@@ -54,7 +54,7 @@ def main():
     genders = ["M", "W"] if args.gender == "both" else [args.gender]
     dates = list(date_range(args.from_date, args.to_date))
     print(f"Backfilling player stats: {len(dates)} days "
-          f"({args.from_date} → {args.to_date}) for {', '.join(genders)}")
+          f"({args.from_date} -> {args.to_date}) for {', '.join(genders)}")
 
     for gender in genders:
         label = "Men's" if gender == "M" else "Women's"

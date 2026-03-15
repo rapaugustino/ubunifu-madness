@@ -79,7 +79,7 @@ def main():
 
     genders = ["M", "W"] if args.gender == "both" else [args.gender]
     dates = list(date_range(args.from_date, args.to_date))
-    print(f"Backfilling {len(dates)} days ({args.from_date} → {args.to_date}) for {', '.join(genders)}")
+    print(f"Backfilling {len(dates)} days ({args.from_date} -> {args.to_date}) for {', '.join(genders)}")
 
     session = SessionLocal()
     try:

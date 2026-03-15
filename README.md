@@ -1,8 +1,8 @@
 # Ubunifu Madness
 
-AI-powered March Madness prediction platform that combines custom Elo ratings, advanced statistical modeling, and live ESPN data to predict NCAA basketball tournament outcomes.
+AI-powered March Madness prediction platform that combines custom Elo ratings, a trained ML ensemble (LR + LightGBM), and live ESPN data to predict NCAA basketball tournament outcomes for both men's and women's basketball.
 
-Built for the [Kaggle March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025) competition — and extended into a full-stack web application with live scores, power rankings, bracket visualization, and an AI analysis agent.
+Built for the [Kaggle March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025) competition and extended into a full-stack web application with live scores, power rankings, bracket visualization, performance tracking, and an AI analysis agent.
 
 ## Architecture
 
@@ -231,7 +231,7 @@ ubunifu-madness/
 │   │   │   ├── tournament.py       # TourneySeed
 │   │   │   ├── player.py           # Player + PlayerSeasonStats
 │   │   │   └── model_artifact.py   # Stored model metadata
-│   │   ├── routers/                # 9 API routers
+│   │   ├── routers/                # 10 API routers
 │   │   │   ├── teams.py            # Team search & details
 │   │   │   ├── rankings.py         # Power & conference rankings
 │   │   │   ├── predictions.py      # Head-to-head predictions
@@ -243,17 +243,21 @@ ubunifu-madness/
 │   │   │   └── performance.py      # Model accuracy tracking
 │   │   └── services/
 │   │       ├── espn.py             # ESPN API client with TTL cache
-│   │       ├── predictor.py        # Blended 6-signal predictor
-│   │       └── player_sync.py      # ESPN → DB player/stat sync
+│   │       ├── predictor.py        # V5 ML ensemble predictor
+│   │       ├── advanced_stats.py   # AdjEM, Barthag, power ratings
+│   │       └── player_sync.py      # ESPN to DB player/stat sync
 │   ├── scripts/
 │   │   ├── compute_stats.py        # Elo + conference strength + team stats
 │   │   ├── update_elo_live.py      # Live Elo updates from ESPN results
 │   │   ├── cron_elo_update.py      # Daily cron wrapper (M+W)
 │   │   ├── import_predictions.py   # Load predictions CSV into DB
-│   │   ├── map_espn_ids.py         # Map Kaggle ↔ ESPN team IDs
+│   │   ├── map_espn_ids.py         # Map Kaggle to ESPN team IDs
 │   │   ├── seed_db.py              # Initial database seeding from CSVs
 │   │   ├── update_detailed_stats.py # Refresh Four Factors from Kaggle
-│   │   └── backfill_espn_games.py  # Backfill missing ESPN game results
+│   │   ├── backfill_espn_games.py  # Backfill missing ESPN game results
+│   │   ├── regenerate_predictions.py  # Re-lock predictions for date range
+│   │   ├── backtest_submissions.py    # Backtest Kaggle submissions
+│   │   └── calibrate_submission.py    # Post-hoc calibration for Kaggle
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -276,7 +280,7 @@ ubunifu-madness/
 │   └── Ubunifu_Madness_March_ML_Mania.ipynb
 └── data/
     ├── raw/                        # Kaggle CSVs (not in git)
-    └── espn_team_map.json          # ESPN ↔ Kaggle ID mapping
+    └── espn_team_map.json          # ESPN to Kaggle ID mapping
 ```
 
 ## Quick Start
@@ -331,29 +335,31 @@ The app is now available at `http://localhost:3000`.
 2. Seed database: `cd backend && python3 -m scripts.seed_db`
 3. Compute stats: `python3 -m scripts.compute_stats`
 4. Map ESPN teams: `python3 -m scripts.map_espn_ids`
-5. Load predictions: `python3 -m scripts.import_predictions ../submissions/stage2_submission_v2.csv`
+5. Load predictions: `python3 -m scripts.import_predictions ../submissions/stage2_submission_v5.csv`
 
 ## Key Features
 
-- **Power Rankings** — Custom Elo-based rankings for 700+ teams (men's and women's), updated daily from ESPN results
-- **Live Scores** — Real-time ESPN scoreboard with Elo enrichment and blended win probabilities, locked before tipoff with post-game accuracy tracking
-- **Blended Predictions** — 6-signal prediction system: Static Model (30%), Elo (30%), Momentum (15%), Conference Strength (10%), SOS-Adjusted Record (10%), Efficiency (5%)
-- **Tournament Bracket** — Full bracket visualization with model-predicted advancement probabilities via Monte Carlo simulation
-- **Team Comparison** — Side-by-side statistical breakdown (Four Factors, efficiency, momentum, coaching) with head-to-head win probability
-- **Madness Agent** — AI-powered chat assistant (Claude) with 6 tools: team lookup, blended matchup predictions, conference analysis, rankings, live scores, upset finder
-- **Performance Tracking** — Cumulative accuracy charts, daily breakdowns, calibration curves, and paginated game log. Predictions locked before tipoff, never changed retroactively.
-- **Tossup Handling** — Games with <52% model confidence labeled as TOSSUP, excluded from accuracy metrics
-- **Automated Daily Pipeline** — Cron job updates Elo ratings, game results, team records, player stats, strength of schedule, and conference strength
+- **Power Rankings** -- Composite power ratings (AdjEM 35%, Elo 25%, SOS 15%, Barthag 15%, Win% 5%, Momentum 5%) for 700+ teams (men's and women's), updated daily from ESPN results
+- **Live Scores** -- Real-time ESPN scoreboard with Elo enrichment and ML ensemble win probabilities, locked before tipoff with post-game accuracy tracking
+- **V5 ML Ensemble Predictions** -- LR (37.8%) + LightGBM (62.2%) ensemble with 40 features and smooth isotonic calibration. Validation Brier: 0.137, accuracy: 80%
+- **Tournament Bracket** -- Full bracket visualization with model-predicted advancement probabilities via Monte Carlo simulation
+- **Team Comparison** -- Side-by-side statistical breakdown (Four Factors, advanced efficiency, momentum, coaching) with head-to-head win probability and matchup explanation
+- **Madness Agent** -- AI chat assistant (Claude Haiku) with 6 tools: team lookup, matchup predictions, conference analysis, rankings, live scores, upset candidates
+- **Performance Tracking** -- Cumulative accuracy charts, daily breakdowns, calibration curves, and paginated game log. Predictions locked before tipoff, never changed retroactively
+- **Tossup Handling** -- Games with <55% model confidence labeled as TOSSUP, excluded from accuracy metrics
+- **Automated Daily Pipeline** -- Cron job updates Elo, game results, records, player stats, SOS, advanced stats (AdjEM, Barthag), power ratings, and locks predictions
 
 ## Model Performance
 
 | Metric | Value |
 |--------|-------|
-| Brier Score (calibrated) | **0.1413** |
-| Static Ensemble | LR (76%) + LightGBM (24%) |
-| Features | 31 across 8 categories |
-| Calibration | Isotonic regression |
-| CV Strategy | Leave-one-season-out (2015-2025) |
-| Live Prediction | Blended 6-signal (Elo + Model + Momentum + Conference + SOS + Efficiency) |
+| Validation Brier Score | **0.137** |
+| Validation Accuracy | **80.0%** |
+| Ensemble | LR (37.8%) + LightGBM (62.2%) |
+| Features | 40 across 9 categories |
+| Training Data | 163K games (2012-2025, all game types) |
+| Calibration | Smooth isotonic (linear interpolation between step midpoints) |
+| Training Weighting | Recency-weighted (5-season half-life, ~7x newest/oldest) |
+| Live Prediction | V5 ML ensemble with fallback to Elo + record blend |
 
 See [docs/MODEL.md](docs/MODEL.md) for the full breakdown.
