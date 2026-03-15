@@ -421,9 +421,13 @@ def get_conference_standings(gender: str = "M", season: int = 2026) -> list[dict
 
 
 def get_tournament_teams(gender: str = "M") -> list[dict]:
-    """Get NCAA tournament teams with seeds from ESPN (available after Selection Sunday).
+    """Get NCAA tournament teams with seeds and regions from ESPN.
 
-    Returns list of {espnId, name, seed, region} or empty list if not available.
+    Available after Selection Sunday. Fetches tournament scoreboard (groups=100)
+    and parses seed numbers from curatedRank and regions from event names
+    (e.g. "South Region - 1st Round").
+
+    Returns list of {espnId, name, seed, region, logo, abbreviation}.
     """
     sport = SPORTS.get(gender, SPORTS["M"])
     # ESPN groups=100 is March Madness tournament
@@ -433,15 +437,42 @@ def get_tournament_teams(gender: str = "M") -> list[dict]:
     except Exception:
         return []
 
+    # Map ESPN region names to our single-letter codes
+    region_map = {
+        "east": "W",      # Kaggle W = East
+        "west": "X",      # Kaggle X = West
+        "south": "Y",     # Kaggle Y = South
+        "midwest": "Z",   # Kaggle Z = Midwest
+    }
+
     teams = {}
     for event in data.get("events", []):
+        # Parse region from event name (e.g. "South Region - 1st Round")
+        event_name = event.get("name", "")
+        headline = ""
+        for note in event.get("competitions", [{}])[0].get("notes", []):
+            headline = note.get("headline", "")
+            break
+        # Region is in the headline or event status type detail
+        region_code = None
+        for text in [headline, event_name]:
+            text_lower = text.lower()
+            for region_name, code in region_map.items():
+                if region_name in text_lower:
+                    region_code = code
+                    break
+            if region_code:
+                break
+
         comp = event.get("competitions", [{}])[0]
         for c in comp.get("competitors", []):
             t = c.get("team", {})
             espn_id = int(t["id"])
             if espn_id in teams:
                 continue
-            seed = c.get("seed")
+
+            # Seed from curatedRank.current or direct seed field
+            seed = c.get("curatedRank", {}).get("current") or c.get("seed")
 
             logos = t.get("logos", [])
             logo = t.get("logo") or (logos[0]["href"] if logos else None)
@@ -451,6 +482,7 @@ def get_tournament_teams(gender: str = "M") -> list[dict]:
                 "abbreviation": t.get("abbreviation", ""),
                 "logo": logo,
                 "seed": seed,
+                "region": region_code,
             }
 
     return list(teams.values())

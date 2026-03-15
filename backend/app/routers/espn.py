@@ -274,6 +274,7 @@ def refresh_seeds(
 
     inserted = 0
     skipped = 0
+    missing_region = 0
     for et in espn_teams:
         db_team = espn_map.get(et["espnId"])
         if not db_team:
@@ -295,8 +296,10 @@ def refresh_seeds(
             .first()
         )
         seed_int = int(seed_num)
-        # Derive region from insertion order (W, X, Y, Z for groups of 16)
-        region = et.get("region", "W")
+        region = et.get("region")
+        if not region:
+            region = "W"  # fallback if ESPN didn't include region
+            missing_region += 1
         seed_str = f"{region}{seed_int:02d}"
 
         if existing:
@@ -320,6 +323,7 @@ def refresh_seeds(
         "gender": gender,
         "inserted": inserted,
         "skipped": skipped,
+        "missing_region": missing_region,
     }
 
 
