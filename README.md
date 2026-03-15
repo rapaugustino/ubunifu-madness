@@ -2,7 +2,7 @@
 
 AI-powered March Madness prediction platform that combines custom Elo ratings, a trained ML ensemble (LR + LightGBM), and live ESPN data to predict NCAA basketball tournament outcomes for both men's and women's basketball.
 
-Built for the [Kaggle March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025) competition and extended into a full-stack web application with live scores, power rankings, bracket visualization, performance tracking, and an AI analysis agent.
+Built for the [Kaggle March Machine Learning Mania 2026](https://www.kaggle.com/competitions/march-machine-learning-mania-2026) competition and extended into a full-stack web application with live scores, power rankings, bracket visualization, performance tracking, and an AI analysis agent.
 
 ## Architecture
 
@@ -331,7 +331,7 @@ The app is now available at `http://localhost:3000`.
 
 ### Data Pipeline (First-Time Setup)
 
-1. Download Kaggle data: [March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025/data) — place CSVs in `data/raw/`
+1. Download Kaggle data: [March Machine Learning Mania 2026](https://www.kaggle.com/competitions/march-machine-learning-mania-2026/data) — place CSVs in `data/raw/`
 2. Seed database: `cd backend && python3 -m scripts.seed_db`
 3. Compute stats: `python3 -m scripts.compute_stats`
 4. Map ESPN teams: `python3 -m scripts.map_espn_ids`
