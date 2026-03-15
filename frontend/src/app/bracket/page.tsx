@@ -39,11 +39,17 @@ interface RegionData {
   winner: BracketTeam | null;
 }
 
+interface FirstFourMatchup extends Matchup {
+  region: string;
+  seed: number;
+}
+
 interface BracketData {
   season: number;
   gender: string;
   hasBracket: boolean;
   isComplete: boolean;
+  firstFour: FirstFourMatchup[];
   regions: Record<string, RegionData>;
   finalFour: (Matchup | null)[];
   championship: (Matchup | null)[];
@@ -899,6 +905,18 @@ export default function BracketPage() {
 
       {/* Region tabs */}
       <div className="flex items-center gap-1 mb-6 p-1 bg-card rounded-lg border border-card-border w-fit flex-wrap">
+        {bracket.firstFour && bracket.firstFour.length > 0 && (
+          <button
+            onClick={() => setActiveRegion("First Four")}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              activeRegion === "First Four"
+                ? "bg-accent/15 text-accent"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            First Four
+          </button>
+        )}
         {regionNames.map((region) => (
           <button
             key={region}
@@ -925,7 +943,33 @@ export default function BracketPage() {
       </div>
 
       {/* Bracket view */}
-      {activeRegion === "Final Four" ? (
+      {activeRegion === "First Four" ? (
+        <div>
+          <h3 className="text-sm font-medium text-muted mb-3 uppercase tracking-wider">
+            First Four — Play-In Games
+          </h3>
+          <p className="text-xs text-muted mb-4">
+            Winners advance to the Round of 64 in their respective regions.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
+            {bracket.firstFour.map((matchup, i) => (
+              <div key={`ff4_${i}`}>
+                <div className="text-[10px] text-muted mb-1 uppercase tracking-wider">
+                  {matchup.region} Region — {matchup.seed} Seed
+                </div>
+                <MatchupCard
+                  matchup={matchup}
+                  isHistorical={true}
+                  picks={displayPicks}
+                  slotId={`first_four_${i}`}
+                  onPick={handlePick}
+                  onAnalyze={setAnalysisMatchup}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : activeRegion === "Final Four" ? (
         <div className="space-y-6">
           {/* Final Four */}
           <div>

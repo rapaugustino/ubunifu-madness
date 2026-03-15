@@ -236,16 +236,22 @@ def full_bracket(
             by_region[region][seed_row.seed_number] = []
         by_region[region][seed_row.seed_number].append(team.id)
 
-    # Resolve play-in games: if a seed slot has 2 teams, find the result
+    # Build First Four matchups and resolve play-in games
+    first_four = []
     for region in by_region:
         for seed_num, team_ids in by_region[region].items():
             if len(team_ids) == 2:
+                t1, t2 = team_ids[0], team_ids[1]
+                matchup = make_matchup(t1, t2)
+                if matchup:
+                    matchup["region"] = REGION_NAMES.get(region, region)
+                    matchup["seed"] = seed_num
+                    first_four.append(matchup)
                 key = frozenset(team_ids)
                 if key in result_lookup:
                     winner_id = result_lookup[key].w_team_id
                     by_region[region][seed_num] = [winner_id]
                 else:
-                    # No play-in result yet — use higher-seeded/first team
                     by_region[region][seed_num] = [team_ids[0]]
 
     # Build bracket region by region
@@ -350,6 +356,7 @@ def full_bracket(
         "gender": gender,
         "hasBracket": True,
         "isComplete": is_complete,
+        "firstFour": first_four,
         "regions": regions,
         "finalFour": final_four,
         "championship": championship,
