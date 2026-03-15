@@ -24,7 +24,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-.claude/
 
 # Environment variables
 .env
@@ -39,7 +38,3 @@ Thumbs.db
 node_modules/
 .next/
 out/
-
-# Docs and planning (local only)
-docs/
-ROADMAP.md
