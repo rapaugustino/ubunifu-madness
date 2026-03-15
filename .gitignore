@@ -34,6 +34,10 @@ Thumbs.db
 *.joblib
 *.model
 
+# Ops runbooks (contain deployment details — keep local)
+docs/RETRAINING.md
+ROADMAP.md
+
 # Node (frontend)
 node_modules/
 .next/

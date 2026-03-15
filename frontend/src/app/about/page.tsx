@@ -86,7 +86,10 @@ export default function AboutPage() {
           <p>
             The model uses <strong>game-type context</strong> as a feature — it knows whether
             a game is regular season, conference tournament, or NCAA tournament and adjusts
-            predictions accordingly. This eliminates the need for manual probability compression.
+            predictions accordingly. Gender-specific post-calibration is applied for conference
+            tournament games: women&apos;s predictions are compressed 10% toward 50% to account
+            for higher single-elimination volatility; men&apos;s predictions use no compression
+            (calibration analysis showed it was not needed).
           </p>
           <p>
             If the ML model is unavailable (e.g., during first deployment), the system falls
@@ -198,8 +201,50 @@ export default function AboutPage() {
           <p>
             When you ask &quot;Who should I pick in a Duke vs. UNC matchup?&quot;, the agent
             calls the matchup prediction tool, pulls real win probabilities and stats, then
-            explains its reasoning with specific numbers. It doesn&apos;t guess — every claim
-            is grounded in data.
+            explains its reasoning with specific numbers. Strict grounding rules prevent the
+            agent from fabricating stats, guessing tournament seeds, or making style claims
+            without checking the data. Every claim must be backed by a tool result — if the
+            data is not available, the agent says so rather than guessing.
+          </p>
+        </div>
+      </section>
+
+      {/* Interactive Bracket */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-3">Interactive Bracket</h2>
+        <div className="text-sm text-muted leading-relaxed space-y-3">
+          <p>
+            The bracket page supports four modes, each offering a different perspective
+            on the tournament field:
+          </p>
+          <ul className="list-disc list-inside space-y-1 ml-2">
+            <li>
+              <strong>My Bracket:</strong> Click matchups to make your own picks.
+              Predictions are saved locally and can be synced across devices via email.
+              A Monte Carlo simulation (1,000 runs) shows championship and Final Four
+              probabilities to inform your decisions.
+            </li>
+            <li>
+              <strong>Model Bracket:</strong> Every game is decided by the V5 ML
+              ensemble, always picking the statistical favorite (chalk strategy).
+              Generated once after Selection Sunday and permanently locked.
+            </li>
+            <li>
+              <strong>Agent Bracket:</strong> The AI agent fills out a bracket using a
+              balanced strategy that introduces calculated upsets where the underdog has
+              at least 35% win probability. Also generated once and locked.
+            </li>
+            <li>
+              <strong>Consensus Bracket:</strong> Combines the Model and Agent brackets.
+              Where both agree, the pick is high confidence. Where they disagree, the
+              model&apos;s probability breaks the tie. The agreement percentage shows how
+              aligned the two approaches are — typically 70-80% on chalk picks, diverging
+              on the 20-30% of games where upsets are plausible.
+            </li>
+          </ul>
+          <p>
+            All bracket modes support AI-powered per-matchup analysis (click any
+            matchup for a detailed breakdown) and text export for sharing.
           </p>
         </div>
       </section>

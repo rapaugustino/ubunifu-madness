@@ -1,6 +1,6 @@
 # Technical Challenges & Solutions
 
-A record of the key technical challenges encountered while building Ubunifu Madness, how we diagnosed them, and the solutions we implemented. Useful for interviews, blog posts, and future development.
+A record of the key technical challenges encountered while building Ubunifu Madness, how we diagnosed them, and the solutions we implemented.
 
 ---
 

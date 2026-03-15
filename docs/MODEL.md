@@ -468,23 +468,35 @@ After deploying V3 with smooth calibration on March 10, 2026:
 | Tossups identified | 7 | 16 |
 | Unique probability values | ~15 (clustered) | 129/133 (smooth) |
 
-## Interview Talking Points
+## Design Decisions and Rationale
 
-1. **Why retrain on modern data only (2012+)?** Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading.
+### Why modern data only (2012+)?
 
-2. **What changed from V3 to V5?** V3 trained on ~4,300 tournament games only. V4 expanded to 163K+ games across all game types with game-context features. V5 added recency-weighted training (5-season half-life) to emphasize modern-era patterns and KenPom-style home court adjustment for more accurate efficiency metrics.
+Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading. Training on all 41 years would dilute the signal from modern-era patterns that matter most for current predictions.
 
-3. **How did you fix the calibration clustering?** Isotonic regression with limited training data creates a step function. We use linear interpolation between step midpoints to produce smooth, continuous probabilities.
+### Evolution from V3 to V5
 
-4. **Why did LightGBM improve so much?** On modern data (2012+), LGB's ability to capture nonlinear interactions (seed × Elo, conference strength × momentum) becomes valuable. With Optuna tuning on the right data distribution, LGB went from the weaker model to the dominant one (62% weight).
+V3 trained on ~4,300 tournament games only. V4 expanded to 163K+ games across all game types with game-context features (`is_conf_tourney`, `is_ncaa_tourney`). V5 added recency-weighted training (5-season half-life, so 2025 games are weighted ~7x more than 2012) and KenPom-style home court adjustment for more accurate efficiency metrics.
 
-5. **What's new in V5?** Recency-weighted training (newer games matter more via exponential decay), home court adjustment in AdjEM computation, reweighted power ratings (75% efficiency-based), and feature-diff based matchup explanations that only report factors where the favored team genuinely has the edge.
+### Solving calibration clustering
 
-6. **Why recency weighting?** Basketball changed fundamentally with the transfer portal (2018+) and NIL (2021+). A 2025 game is ~7x more informative than a 2012 game for predicting 2026 outcomes. Recency weighting captures this without discarding older data entirely.
+Standard isotonic regression with limited training data produces a step function with ~17 unique output levels. Very different matchups map to the same prediction. We use linear interpolation between step midpoints to produce smooth, continuous probabilities while maintaining calibration accuracy. Result: 15/50 unique predictions became 50/50.
 
-7. **How does it compare to Vegas?** Our V5 validation Brier of 0.137 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have.
+### Why LightGBM dominates the ensemble
 
-8. **Why not use head-to-head record as a feature?** We tested it — validation Brier dropped to 0.042 (accuracy 92.4%), revealing massive label leakage. Regular season series almost perfectly predicts conference tournament rematches. The feature is too good to be true.
+On modern data (2012+), LGB's ability to capture nonlinear interactions (seed x Elo, conference strength x momentum) becomes valuable. With Optuna-tuned hyperparameters on the right data distribution, LGB went from the weaker model in V2 (23.6% weight) to the dominant one in V3+ (62.2% weight).
+
+### Recency weighting rationale
+
+The transfer portal (2018+) and NIL (2021+) changed how rosters are built. A 2025 game is ~7x more informative than a 2012 game for predicting 2026 outcomes. Exponential decay with a 5-season half-life captures this without discarding older data entirely.
+
+### Comparison to Vegas lines
+
+Our V5 validation Brier of 0.137 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have access to.
+
+### Why head-to-head record was rejected
+
+We tested season head-to-head record as a feature -- validation Brier dropped to 0.042 (accuracy 92.4%), revealing massive label leakage. Regular season series almost perfectly predicts conference tournament rematches (teams that split 1-1 are ~50/50, teams that went 2-0 almost always win again). The feature is too good to be true and was removed from training. It is still used as context in matchup explanations only.
 
 ## Live Elo Updates
 

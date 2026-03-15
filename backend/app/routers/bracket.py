@@ -9,6 +9,7 @@ from app.models import (
     Team, TourneySeed, Prediction, EloRating,
     TeamConference, TeamSeasonStats, GameResult, Conference,
 )
+from app.models.official_bracket import OfficialBracket
 
 router = APIRouter(tags=["bracket"])
 
@@ -549,4 +550,373 @@ def simulate_bracket(
     return {
         "championProbabilities": champ_probs,
         "finalFourProbabilities": ff_probs,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Official brackets (model + agent) -- generated once, then locked
+# ---------------------------------------------------------------------------
+
+@router.get("/bracket/official")
+def get_official_bracket(
+    gender: str = Query("M", pattern="^(M|W)$"),
+    bracket_type: str = Query("model", pattern="^(model|agent|consensus)$"),
+    season: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Retrieve a locked official bracket. Returns null if not yet generated."""
+    actual_season = season if season > 0 else 2026
+    row = (
+        db.query(OfficialBracket)
+        .filter(
+            OfficialBracket.season == actual_season,
+            OfficialBracket.gender == gender,
+            OfficialBracket.bracket_type == bracket_type,
+        )
+        .first()
+    )
+    if not row:
+        return {"exists": False, "bracket_type": bracket_type, "season": actual_season, "gender": gender}
+    return {
+        "exists": True,
+        "bracket_type": bracket_type,
+        "season": actual_season,
+        "gender": gender,
+        "picks": row.picks,
+        "metadata": row.metadata_,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.post("/bracket/official/generate")
+def generate_official_bracket(
+    gender: str = Query("M", pattern="^(M|W)$"),
+    bracket_type: str = Query("model", pattern="^(model|agent)$"),
+    season: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Generate and lock an official bracket. Fails if one already exists.
+
+    Model bracket: always picks the favorite (chalk).
+    Agent bracket: uses a balanced strategy with slight upset variance.
+    """
+    actual_season = season if season > 0 else 2026
+
+    # Check if already generated
+    existing = (
+        db.query(OfficialBracket)
+        .filter(
+            OfficialBracket.season == actual_season,
+            OfficialBracket.gender == gender,
+            OfficialBracket.bracket_type == bracket_type,
+        )
+        .first()
+    )
+    if existing:
+        return {
+            "error": f"{bracket_type.title()} bracket already generated and locked.",
+            "exists": True,
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+        }
+
+    # Load seeds
+    seeds = (
+        db.query(TourneySeed, Team)
+        .join(Team, Team.id == TourneySeed.team_id)
+        .filter(TourneySeed.season == actual_season, Team.gender == gender)
+        .all()
+    )
+    if not seeds:
+        raise HTTPException(404, "No tournament seeds available yet.")
+
+    all_team_ids = list({team.id for _, team in seeds})
+
+    # Load predictions and Elo
+    preds = (
+        db.query(Prediction)
+        .filter(
+            Prediction.season == actual_season,
+            Prediction.team_a_id.in_(all_team_ids),
+            Prediction.team_b_id.in_(all_team_ids),
+        )
+        .all()
+    )
+    pred_cache = {(p.team_a_id, p.team_b_id): p.win_prob_a for p in preds}
+    elo_map = {
+        r.team_id: r.elo
+        for r in db.query(EloRating)
+        .filter(EloRating.season == actual_season, EloRating.team_id.in_(all_team_ids))
+        .all()
+    }
+    use_elo = len(pred_cache) == 0
+
+    def get_prob(t1, t2):
+        if use_elo:
+            e1 = elo_map.get(t1, 1500)
+            e2 = elo_map.get(t2, 1500)
+            return 1 / (1 + 10 ** ((e2 - e1) / 400))
+        lo, hi = min(t1, t2), max(t1, t2)
+        prob = pred_cache.get((lo, hi))
+        if prob is not None:
+            return prob if t1 == lo else (1 - prob)
+        return 0.5
+
+    # Group by region, resolve play-ins
+    by_region = {}
+    for seed_row, team in seeds:
+        region = seed_row.region
+        if region not in by_region:
+            by_region[region] = {}
+        if seed_row.seed_number not in by_region[region]:
+            by_region[region][seed_row.seed_number] = []
+        by_region[region][seed_row.seed_number].append(team.id)
+
+    # Load game results for play-in resolution
+    tourney_games = (
+        db.query(GameResult)
+        .filter(
+            GameResult.season == actual_season,
+            GameResult.game_type == "tourney",
+            GameResult.gender == gender,
+        )
+        .all()
+    )
+    result_lookup = {}
+    for g in tourney_games:
+        result_lookup[frozenset([g.w_team_id, g.l_team_id])] = g
+
+    for region in by_region:
+        for seed_num, team_ids in by_region[region].items():
+            if len(team_ids) == 2:
+                key = frozenset(team_ids)
+                if key in result_lookup:
+                    by_region[region][seed_num] = [result_lookup[key].w_team_id]
+                else:
+                    by_region[region][seed_num] = [team_ids[0]]
+
+    def pick_winner(t1_id, t2_id):
+        """Return winner team_id based on bracket type strategy."""
+        prob_t1 = get_prob(t1_id, t2_id)
+        if bracket_type == "model":
+            # Chalk: always pick the favorite
+            return t1_id if prob_t1 >= 0.5 else t2_id
+        else:
+            # Agent: balanced -- 30% chance to pick underdog if >35% win prob
+            if prob_t1 >= 0.5:
+                fav, dog = t1_id, t2_id
+                dog_prob = 1 - prob_t1
+            else:
+                fav, dog = t2_id, t1_id
+                dog_prob = prob_t1
+            if dog_prob >= 0.35 and random.random() < 0.30:
+                return dog
+            return fav
+
+    # Build the bracket picks dict (slotId -> teamId)
+    # Slot format matches frontend: "{regionName}_r{roundIdx}_{matchIdx}"
+    picks = {}
+    metadata = {"strategy": "chalk" if bracket_type == "model" else "balanced"}
+    region_winners = {}
+
+    for region_code in sorted(by_region.keys()):
+        region_name = REGION_NAMES.get(region_code, region_code)
+        teams_by_seed = {s: ids[0] for s, ids in by_region[region_code].items() if ids}
+
+        # Round of 64
+        r1_winners = []
+        for match_idx, (sa, sb) in enumerate(ROUND1_MATCHUPS):
+            tid_a = teams_by_seed.get(sa)
+            tid_b = teams_by_seed.get(sb)
+            if tid_a and tid_b:
+                winner = pick_winner(tid_a, tid_b)
+                picks[f"{region_name}_r0_{match_idx}"] = winner
+                r1_winners.append(winner)
+            else:
+                w = tid_a or tid_b
+                if w:
+                    picks[f"{region_name}_r0_{match_idx}"] = w
+                    r1_winners.append(w)
+                else:
+                    r1_winners.append(None)
+
+        # Rounds 2-4 (R32, S16, E8)
+        current = r1_winners
+        for round_idx in range(1, 4):
+            next_round = []
+            match_idx = 0
+            for i in range(0, len(current), 2):
+                tid_a = current[i] if i < len(current) else None
+                tid_b = current[i + 1] if i + 1 < len(current) else None
+                if tid_a and tid_b:
+                    winner = pick_winner(tid_a, tid_b)
+                    picks[f"{region_name}_r{round_idx}_{match_idx}"] = winner
+                    next_round.append(winner)
+                elif tid_a or tid_b:
+                    w = tid_a or tid_b
+                    picks[f"{region_name}_r{round_idx}_{match_idx}"] = w
+                    next_round.append(w)
+                else:
+                    next_round.append(None)
+                match_idx += 1
+            current = next_round
+
+        region_winners[region_code] = current[0] if current else None
+
+    # Final Four
+    ff_teams = []
+    for pair_idx, (rc_a, rc_b) in enumerate(FF_PAIRINGS):
+        tid_a = region_winners.get(rc_a)
+        tid_b = region_winners.get(rc_b)
+        if tid_a and tid_b:
+            winner = pick_winner(tid_a, tid_b)
+            picks[f"ff_{pair_idx}"] = winner
+            ff_teams.append(winner)
+        else:
+            w = tid_a or tid_b
+            if w:
+                picks[f"ff_{pair_idx}"] = w
+                ff_teams.append(w)
+            else:
+                ff_teams.append(None)
+
+    # Championship
+    if len(ff_teams) == 2 and ff_teams[0] and ff_teams[1]:
+        winner = pick_winner(ff_teams[0], ff_teams[1])
+        picks["champ_0"] = winner
+        # Store champion name in metadata
+        champ_team = db.query(Team).filter(Team.id == winner).first()
+        metadata["champion"] = champ_team.name if champ_team else str(winner)
+
+    # Save to DB
+    official = OfficialBracket(
+        season=actual_season,
+        gender=gender,
+        bracket_type=bracket_type,
+        picks=picks,
+        metadata_=metadata,
+    )
+    db.add(official)
+    db.commit()
+    db.refresh(official)
+
+    return {
+        "exists": True,
+        "bracket_type": bracket_type,
+        "season": actual_season,
+        "gender": gender,
+        "picks": picks,
+        "metadata": metadata,
+        "created_at": official.created_at.isoformat() if official.created_at else None,
+    }
+
+
+@router.post("/bracket/official/consensus")
+def generate_consensus_bracket(
+    gender: str = Query("M", pattern="^(M|W)$"),
+    season: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Generate a consensus bracket by combining model and agent brackets.
+
+    Where both agree: pick that team (high confidence).
+    Where they disagree: use the model's prediction probability to decide,
+    and flag the slot as contested.
+    """
+    actual_season = season if season > 0 else 2026
+
+    # Check if consensus already exists
+    existing = (
+        db.query(OfficialBracket)
+        .filter(
+            OfficialBracket.season == actual_season,
+            OfficialBracket.gender == gender,
+            OfficialBracket.bracket_type == "consensus",
+        )
+        .first()
+    )
+    if existing:
+        return {
+            "error": "Consensus bracket already generated and locked.",
+            "exists": True,
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+        }
+
+    # Load model and agent brackets
+    model_bracket = (
+        db.query(OfficialBracket)
+        .filter(
+            OfficialBracket.season == actual_season,
+            OfficialBracket.gender == gender,
+            OfficialBracket.bracket_type == "model",
+        )
+        .first()
+    )
+    agent_bracket = (
+        db.query(OfficialBracket)
+        .filter(
+            OfficialBracket.season == actual_season,
+            OfficialBracket.gender == gender,
+            OfficialBracket.bracket_type == "agent",
+        )
+        .first()
+    )
+
+    if not model_bracket or not agent_bracket:
+        raise HTTPException(
+            400,
+            "Both model and agent brackets must be generated before creating a consensus bracket.",
+        )
+
+    model_picks = model_bracket.picks
+    agent_picks = agent_bracket.picks
+
+    # Merge: collect all slot keys from both
+    all_slots = set(model_picks.keys()) | set(agent_picks.keys())
+    consensus_picks = {}
+    agreed = []
+    contested = []
+
+    for slot in sorted(all_slots):
+        m_pick = model_picks.get(slot)
+        a_pick = agent_picks.get(slot)
+
+        if m_pick == a_pick:
+            # Both agree
+            consensus_picks[slot] = m_pick
+            agreed.append(slot)
+        elif m_pick and a_pick:
+            # Disagree: model wins (data-driven tiebreaker)
+            consensus_picks[slot] = m_pick
+            contested.append(slot)
+        else:
+            # One is missing: use whichever exists
+            consensus_picks[slot] = m_pick or a_pick
+
+    metadata = {
+        "strategy": "consensus",
+        "agreed_slots": len(agreed),
+        "contested_slots": len(contested),
+        "contested_details": contested,
+        "agreement_pct": round(len(agreed) / max(len(all_slots), 1) * 100, 1),
+    }
+
+    official = OfficialBracket(
+        season=actual_season,
+        gender=gender,
+        bracket_type="consensus",
+        picks=consensus_picks,
+        metadata_=metadata,
+    )
+    db.add(official)
+    db.commit()
+    db.refresh(official)
+
+    return {
+        "exists": True,
+        "bracket_type": "consensus",
+        "season": actual_season,
+        "gender": gender,
+        "picks": consensus_picks,
+        "metadata": metadata,
+        "created_at": official.created_at.isoformat() if official.created_at else None,
     }

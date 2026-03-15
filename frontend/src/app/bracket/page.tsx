@@ -378,6 +378,15 @@ function EmailModal({
   );
 }
 
+type BracketMode = "my_bracket" | "model" | "agent" | "consensus";
+
+const BRACKET_MODES: { key: BracketMode; label: string; description: string }[] = [
+  { key: "my_bracket", label: "My Bracket", description: "Fill out your own picks" },
+  { key: "model", label: "Model", description: "V5 ML ensemble picks (chalk)" },
+  { key: "agent", label: "Agent", description: "AI agent picks (balanced upsets)" },
+  { key: "consensus", label: "Consensus", description: "Model + Agent combined" },
+];
+
 export default function BracketPage() {
   const [bracket, setBracket] = useState<BracketData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -386,6 +395,11 @@ export default function BracketPage() {
   const [picks, setPicks] = useState<Record<string, number>>({});
   const [analysisMatchup, setAnalysisMatchup] = useState<Matchup | null>(null);
   const [autoFilling, setAutoFilling] = useState(false);
+  const [bracketMode, setBracketMode] = useState<BracketMode>("my_bracket");
+  const [officialPicks, setOfficialPicks] = useState<Record<string, number> | null>(null);
+  const [officialMeta, setOfficialMeta] = useState<Record<string, unknown> | null>(null);
+  const [officialLoading, setOfficialLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [simResults, setSimResults] = useState<{
     championProbabilities: { teamId: number; teamName: string; probability: number }[];
     finalFourProbabilities: { teamId: number; teamName: string; probability: number }[];
@@ -402,6 +416,54 @@ export default function BracketPage() {
       }
     },
   );
+
+  // Load official bracket when mode changes
+  useEffect(() => {
+    if (bracketMode === "my_bracket") {
+      setOfficialPicks(null);
+      setOfficialMeta(null);
+      return;
+    }
+    setOfficialLoading(true);
+    fetch(`${API_URL}/api/bracket/official?gender=${gender}&bracket_type=${bracketMode}&season=0`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.exists) {
+          setOfficialPicks(data.picks);
+          setOfficialMeta(data.metadata);
+        } else {
+          setOfficialPicks(null);
+          setOfficialMeta(null);
+        }
+      })
+      .catch(() => {
+        setOfficialPicks(null);
+        setOfficialMeta(null);
+      })
+      .finally(() => setOfficialLoading(false));
+  }, [bracketMode, gender]);
+
+  const generateOfficial = async () => {
+    if (!bracket || generating) return;
+    setGenerating(true);
+    try {
+      const endpoint =
+        bracketMode === "consensus"
+          ? `${API_URL}/api/bracket/official/consensus?gender=${gender}&season=${bracket.season}`
+          : `${API_URL}/api/bracket/official/generate?gender=${gender}&bracket_type=${bracketMode}&season=${bracket.season}`;
+      const res = await fetch(endpoint, { method: "POST" });
+      const data = await res.json();
+      if (data.exists && data.picks) {
+        setOfficialPicks(data.picks);
+        setOfficialMeta(data.metadata);
+      }
+    } catch {}
+    setGenerating(false);
+  };
+
+  // Which picks to display based on mode
+  const displayPicks = bracketMode === "my_bracket" ? picks : (officialPicks ?? {});
+  const isReadOnly = bracketMode !== "my_bracket" && officialPicks !== null;
 
   const fetchBracket = useCallback(async () => {
     setLoading(true);
@@ -460,7 +522,9 @@ export default function BracketPage() {
   const exportBracket = () => {
     if (!bracket) return;
 
+    const activePicks = displayPicks;
     const genderLabel = gender === "W" ? "Women's" : "Men's";
+    const modeLabel = BRACKET_MODES.find((m) => m.key === bracketMode)?.label ?? "My Bracket";
     const title = `${bracket.season} ${genderLabel} NCAA Tournament Bracket`;
     const date = new Date().toLocaleDateString("en-US", {
       month: "long",
@@ -468,7 +532,20 @@ export default function BracketPage() {
       year: "numeric",
     });
 
-    // Helper: render a matchup line
+    // Build a team name lookup from bracket data
+    const teamNames: Record<number, string> = {};
+    const teamSeeds: Record<number, number | null> = {};
+    for (const region of Object.values(bracket.regions)) {
+      for (const round of region.rounds) {
+        for (const m of round) {
+          if (m?.teamA) { teamNames[m.teamA.id] = m.teamA.name; teamSeeds[m.teamA.id] = m.teamA.seed; }
+          if (m?.teamB) { teamNames[m.teamB.id] = m.teamB.name; teamSeeds[m.teamB.id] = m.teamB.seed; }
+        }
+      }
+    }
+
+    const pickTag = bracketMode === "my_bracket" ? "YOUR PICK" : modeLabel.toUpperCase();
+
     const matchupLine = (m: Matchup | null, slotId: string) => {
       if (!m || !m.teamA || !m.teamB) return "  TBD vs TBD";
       const a = m.teamA;
@@ -477,40 +554,33 @@ export default function BracketPage() {
       const seedB = b.seed ? `(${b.seed})` : "";
       const probA = (m.winProbA * 100).toFixed(0);
       const probB = ((1 - m.winProbA) * 100).toFixed(0);
-      const pick = picks[slotId];
-      const pickLabel =
-        pick === a.id ? ` ← YOUR PICK` : pick === b.id ? "" : "";
-      const pickLabelB =
-        pick === b.id ? ` ← YOUR PICK` : "";
+      const pick = activePicks[slotId];
+      const markA = pick === a.id ? ` << ${pickTag}` : "";
+      const markB = pick === b.id ? ` << ${pickTag}` : "";
 
       let result = "";
       if (m.result) {
-        const winner =
-          m.result.winnerId === a.id ? a.name : b.name;
+        const winner = m.result.winnerId === a.id ? a.name : b.name;
         result = `  Result: ${winner} ${m.result.winnerScore}-${m.result.loserScore}`;
       }
 
       return [
-        `  ${seedA} ${a.name} (${probA}%)${pickLabel}`,
-        `  ${seedB} ${b.name} (${probB}%)${pickLabelB}`,
+        `  ${seedA} ${a.name} (${probA}%)${markA}`,
+        `  ${seedB} ${b.name} (${probB}%)${markB}`,
         result,
       ]
         .filter(Boolean)
         .join("\n");
     };
 
-    // Build the text
-    let text = `${"═".repeat(60)}\n`;
+    let text = `${"=".repeat(60)}\n`;
     text += `  ${title}\n`;
-    text += `  Generated by Ubunifu Madness · ${date}\n`;
-    text += `  madness.ubunifutech.com\n`;
-    text += `${"═".repeat(60)}\n\n`;
+    text += `  ${modeLabel} Bracket | Generated by Ubunifu Madness\n`;
+    text += `  ${date} | madness.ubunifutech.com\n`;
+    text += `${"=".repeat(60)}\n\n`;
 
-    // Regions
     for (const [regionName, region] of Object.entries(bracket.regions)) {
-      text += `┌${"─".repeat(58)}┐\n`;
-      text += `│  ${regionName.toUpperCase()} REGION${" ".repeat(Math.max(0, 50 - regionName.length))}│\n`;
-      text += `└${"─".repeat(58)}┘\n\n`;
+      text += `--- ${regionName.toUpperCase()} REGION ${"─".repeat(Math.max(0, 42 - regionName.length))}\n\n`;
 
       region.rounds.forEach((round, roundIdx) => {
         const roundLabel = bracket.roundNames[roundIdx] || `Round ${roundIdx + 1}`;
@@ -520,44 +590,48 @@ export default function BracketPage() {
         });
       });
 
-      if (region.winner) {
-        text += `  ★ ${regionName} Champion: ${region.winner.name}\n\n`;
+      // Show who advances from this region based on picks
+      const e8Slot = `${regionName}_r3_0`;
+      const e8Pick = activePicks[e8Slot];
+      if (e8Pick && teamNames[e8Pick]) {
+        const seed = teamSeeds[e8Pick];
+        text += `  >> ${regionName} to Final Four: ${seed ? `(${seed}) ` : ""}${teamNames[e8Pick]}\n\n`;
+      } else if (region.winner) {
+        text += `  >> ${regionName} to Final Four: ${region.winner.name}\n\n`;
       }
     }
 
-    // Final Four
-    text += `┌${"─".repeat(58)}┐\n`;
-    text += `│  FINAL FOUR${" ".repeat(46)}│\n`;
-    text += `└${"─".repeat(58)}┘\n\n`;
-
+    text += `--- FINAL FOUR ${"─".repeat(43)}\n\n`;
     bracket.finalFour.forEach((matchup, i) => {
       text += matchupLine(matchup, `ff_${i}`) + "\n\n";
     });
 
-    // Championship
     if (bracket.championship.length > 0) {
-      text += `┌${"─".repeat(58)}┐\n`;
-      text += `│  CHAMPIONSHIP${" ".repeat(43)}│\n`;
-      text += `└${"─".repeat(58)}┘\n\n`;
-
+      text += `--- CHAMPIONSHIP ${"─".repeat(41)}\n\n`;
       bracket.championship.forEach((matchup, i) => {
         text += matchupLine(matchup, `champ_${i}`) + "\n\n";
       });
     }
 
-    if (bracket.champion) {
-      text += `${"═".repeat(60)}\n`;
+    // Show champion from picks
+    const champPick = activePicks["champ_0"];
+    if (champPick && teamNames[champPick]) {
+      const seed = teamSeeds[champPick];
+      text += `${"=".repeat(60)}\n`;
+      text += `  NATIONAL CHAMPION: ${seed ? `(${seed}) ` : ""}${teamNames[champPick]}\n`;
+      text += `${"=".repeat(60)}\n`;
+    } else if (bracket.champion) {
+      text += `${"=".repeat(60)}\n`;
       text += `  NATIONAL CHAMPION: ${bracket.champion.name}\n`;
-      text += `${"═".repeat(60)}\n`;
+      text += `${"=".repeat(60)}\n`;
     }
 
-    // Open a print-friendly window
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
     printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>${title}</title>
+  <title>${title} - ${modeLabel}</title>
   <style>
     body {
       font-family: "Courier New", Courier, monospace;
@@ -600,6 +674,8 @@ export default function BracketPage() {
   const regionNames = Object.keys(bracket.regions);
   const currentRegion = bracket.regions[activeRegion];
   const isHistorical = bracket.isComplete;
+  const isOfficialMode = bracketMode !== "my_bracket";
+  const canInteract = !isHistorical && !isReadOnly;
 
   return (
     <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -612,11 +688,13 @@ export default function BracketPage() {
           <p className="text-muted text-sm mt-1">
             {isHistorical
               ? `Completed tournament. ${bracket.champion ? `Champion: ${bracket.champion.name}` : ""}`
+              : isOfficialMode
+              ? BRACKET_MODES.find((m) => m.key === bracketMode)?.description ?? ""
               : "Click matchups to make your picks. Probabilities powered by our ML model."}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {!isHistorical && (
+          {canInteract && (
             <>
               <button
                 onClick={autoFill}
@@ -642,7 +720,7 @@ export default function BracketPage() {
             <Download size={14} />
             Export
           </button>
-          {!isHistorical && (
+          {canInteract && (
             sync.isConnected ? (
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-xs text-green-400">
@@ -679,8 +757,8 @@ export default function BracketPage() {
         </div>
       </div>
 
-      {/* Gender toggle */}
-      <div className="flex items-center gap-2 mb-6">
+      {/* Gender toggle + Bracket mode selector */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
         <div className="flex gap-1 bg-card border border-card-border rounded-lg p-1">
           <button
             onClick={() => setGender("M")}
@@ -699,7 +777,61 @@ export default function BracketPage() {
             Women
           </button>
         </div>
+        <div className="flex gap-1 bg-card border border-card-border rounded-lg p-1">
+          {BRACKET_MODES.map((mode) => (
+            <button
+              key={mode.key}
+              onClick={() => setBracketMode(mode.key)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                bracketMode === mode.key
+                  ? "bg-accent text-white"
+                  : "text-muted hover:text-foreground"
+              }`}
+              title={mode.description}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Official bracket status banner */}
+      {isOfficialMode && !officialLoading && !officialPicks && !isHistorical && (
+        <div className="mb-6 p-4 rounded-xl bg-card border border-card-border text-center">
+          <p className="text-sm text-muted mb-3">
+            {bracketMode === "consensus"
+              ? "Consensus bracket requires both Model and Agent brackets to be generated first."
+              : `${BRACKET_MODES.find((m) => m.key === bracketMode)?.label} bracket has not been generated yet.`}
+          </p>
+          <button
+            onClick={generateOfficial}
+            disabled={generating}
+            className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
+          >
+            {generating ? "Generating..." : `Generate ${BRACKET_MODES.find((m) => m.key === bracketMode)?.label} Bracket`}
+          </button>
+        </div>
+      )}
+
+      {/* Official bracket locked banner */}
+      {isOfficialMode && officialPicks && (
+        <div className="mb-6 p-3 rounded-lg bg-green-500/5 border border-green-500/10 flex items-center gap-2">
+          <Check size={14} className="text-green-400 shrink-0" />
+          <span className="text-xs text-green-400">
+            {BRACKET_MODES.find((m) => m.key === bracketMode)?.label} bracket locked.
+            {officialMeta && bracketMode === "consensus" && (
+              <> Agreement: {String(officialMeta.agreement_pct)}% ({String(officialMeta.contested_slots)} contested picks).</>
+            )}
+          </span>
+        </div>
+      )}
+
+      {officialLoading && (
+        <div className="mb-6 flex items-center gap-2 text-sm text-muted">
+          <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          Loading bracket...
+        </div>
+      )}
 
       {/* Champion banner */}
       {bracket.champion && (
@@ -805,8 +937,8 @@ export default function BracketPage() {
                 <MatchupCard
                   key={`ff_${i}`}
                   matchup={matchup}
-                  isHistorical={isHistorical}
-                  picks={picks}
+                  isHistorical={isHistorical || isReadOnly}
+                  picks={displayPicks}
                   slotId={`ff_${i}`}
                   onPick={handlePick}
                   onAnalyze={setAnalysisMatchup}

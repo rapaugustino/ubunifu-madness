@@ -296,6 +296,52 @@ Monte Carlo bracket simulation.
 }
 ```
 
+### `GET /bracket/official`
+
+Retrieve a locked official bracket (model, agent, or consensus).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `gender` | string | `"M"` | `M` or `W` |
+| `bracket_type` | string | `"model"` | `model`, `agent`, or `consensus` |
+| `season` | int | 0 | Season (0 = auto-detect) |
+
+**Response:**
+```json
+{
+  "exists": true,
+  "bracket_type": "model",
+  "season": 2026,
+  "gender": "M",
+  "picks": { "East_r0_0": 1242, "East_r0_1": 1305, "..." : "..." },
+  "metadata": { "strategy": "chalk", "champion": "Duke" },
+  "created_at": "2026-03-16T18:30:00"
+}
+```
+
+### `POST /bracket/official/generate`
+
+Generate and lock a model or agent bracket. Fails if one already exists for the given season/gender/type.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `gender` | string | `"M"` | `M` or `W` |
+| `bracket_type` | string | `"model"` | `model` or `agent` |
+| `season` | int | 0 | Season (0 = auto-detect) |
+
+Model bracket uses chalk strategy (always picks favorite). Agent bracket uses balanced strategy (30% upset rate where underdog has >35% win probability).
+
+### `POST /bracket/official/consensus`
+
+Generate a consensus bracket by merging model and agent brackets. Both must exist first.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `gender` | string | `"M"` | `M` or `W` |
+| `season` | int | 0 | Season (0 = auto-detect) |
+
+**Response includes:** `agreement_pct` (how often model and agent agreed), `contested_slots` (count of disagreements), `contested_details` (which slots differed).
+
 ---
 
 ## Chat (Madness Agent)

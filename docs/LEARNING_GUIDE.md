@@ -1,6 +1,6 @@
 # Ubunifu Madness — Complete Learning Guide
 
-A comprehensive guide to understanding, explaining, and extending the Ubunifu Madness NCAA basketball prediction platform. Written so you can walk into any interview and speak fluently about every layer — from data ingestion to deployed predictions.
+A comprehensive guide to understanding, explaining, and extending the Ubunifu Madness NCAA basketball prediction platform — from data ingestion to deployed predictions.
 
 ---
 
@@ -21,7 +21,7 @@ A comprehensive guide to understanding, explaining, and extending the Ubunifu Ma
 13. [Key Technical Challenges & How We Solved Them](#13-key-challenges)
 14. [Decisions and Trade-offs](#14-decisions-and-trade-offs)
 15. [What I Would Improve Next](#15-future-improvements)
-16. [Interview Q&A](#16-interview-qa)
+16. [Frequently Asked Questions](#16-frequently-asked-questions)
 17. [File Reference](#17-file-reference)
 
 ---
@@ -162,9 +162,9 @@ Serializes the trained LR, LightGBM, and calibrator models as binary blobs and s
 **Step 6 — Import static predictions** (`scripts/import_predictions.py`):
 Loads the submission CSV (all ~132K team pairs) into the `predictions` table for fast API lookups.
 
-### Why this matters for interviews
+### Summary
 
-"I built an end-to-end data pipeline that starts with 25 raw CSV files and an external API, normalizes the data through computed features (Elo, advanced stats), trains an ML model, and serves live predictions through a REST API — all automated daily."
+The data pipeline starts with 25 raw CSV files and an external API, normalizes the data through computed features (Elo, advanced stats), trains an ML model, and serves live predictions through a REST API — all automated daily.
 
 ---
 
@@ -922,11 +922,11 @@ Intellectual honesty. If you allow retroactive adjustments, you can make your ac
 
 ---
 
-## 16. Interview Q&A
+## 16. Frequently Asked Questions
 
-### "Walk me through the project."
+### What does this project do?
 
-"I built an end-to-end NCAA basketball prediction platform for the Kaggle March Machine Learning Mania competition. It uses a LightGBM + Logistic Regression ensemble trained on 163,000 games with 40 features covering Elo ratings, efficiency metrics, and conference strength. The model achieves 80% accuracy on held-out tournament games. Beyond the model, I built a full-stack app with Next.js and FastAPI that shows live predictions, power rankings, and has an AI chat agent powered by Claude that can answer natural-language basketball questions using six data tools. The entire pipeline — Elo updates, stats computation, prediction locking — runs automatically every day."
+Ubunifu Madness is an end-to-end NCAA basketball prediction platform built for the Kaggle March Machine Learning Mania competition. It uses a LightGBM + Logistic Regression ensemble trained on 163,000 games with 40 features covering Elo ratings, efficiency metrics, and conference strength. The model achieves 80% accuracy on held-out tournament games. Beyond the model, there is a full-stack app with Next.js and FastAPI that shows live predictions, power rankings, and has an AI chat agent powered by Claude that can answer natural-language basketball questions using six data tools. The entire pipeline — Elo updates, stats computation, prediction locking — runs automatically every day.
 
 ### "What was the hardest technical challenge?"
 
