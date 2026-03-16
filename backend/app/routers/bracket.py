@@ -389,6 +389,10 @@ def full_bracket(
         "firstFour": first_four,
         "regions": regions,
         "finalFour": final_four,
+        "ffPairings": [
+            [REGION_NAMES.get(a, a), REGION_NAMES.get(b, b)]
+            for a, b in get_ff_pairings(gender)
+        ],
         "championship": championship,
         "champion": champion,
         "roundNames": ROUND_NAMES,

@@ -52,6 +52,7 @@ interface BracketData {
   firstFour: FirstFourMatchup[];
   regions: Record<string, RegionData>;
   finalFour: (Matchup | null)[];
+  ffPairings: string[][];
   championship: (Matchup | null)[];
   champion: BracketTeam | null;
   roundNames: string[];
@@ -721,20 +722,16 @@ export default function BracketPage() {
       }
     }
 
-    // Final Four: region winners feed into ff_0, ff_1
-    const regionNames = Object.keys(bracket.regions);
-    const regionWinnerSlots = regionNames.map((rn) => {
-      const region = bracket.regions[rn];
-      const lastRound = region.rounds.length - 1;
-      return `${rn}_r${lastRound}_0`;
-    });
+    // Final Four: use ffPairings from backend to determine which regions pair up
+    const ffPairings: string[][] = bracket.ffPairings || [];
+    for (let ffIdx = 0; ffIdx < ffPairings.length; ffIdx++) {
+      const [regionA, regionB] = ffPairings[ffIdx];
+      const regA: RegionData | undefined = bracket.regions[regionA];
+      const regB: RegionData | undefined = bracket.regions[regionB];
+      if (!regA || !regB) continue;
 
-    // ff_0 = region 0 winner vs region 1 winner
-    // ff_1 = region 2 winner vs region 3 winner
-    for (let ffIdx = 0; ffIdx < 2; ffIdx++) {
-      const slotA = regionWinnerSlots[ffIdx * 2];
-      const slotB = regionWinnerSlots[ffIdx * 2 + 1];
-      if (!slotA || !slotB) continue;
+      const slotA = `${regionA}_r${regA.rounds.length - 1}_0`;
+      const slotB = `${regionB}_r${regB.rounds.length - 1}_0`;
 
       let winnerA = activePicks[slotA];
       let winnerB = activePicks[slotB];
@@ -743,11 +740,11 @@ export default function BracketPage() {
 
       // Also check backend region winners
       if (!winnerA) {
-        const rw = bracket.regions[regionNames[ffIdx * 2]]?.winner;
+        const rw = regA.winner;
         if (rw?.id) winnerA = rw.id;
       }
       if (!winnerB) {
-        const rw = bracket.regions[regionNames[ffIdx * 2 + 1]]?.winner;
+        const rw = regB.winner;
         if (rw?.id) winnerB = rw.id;
       }
 
