@@ -1,9 +1,12 @@
 """
-Backfill missing game results and Elo updates for the current season.
+Backfill missing game results and Elo updates for the entire current season.
 
 Iterates through every date from season start (Nov 4) to today,
 fetching ESPN scoreboards and processing any games not already in GameResult.
-Safe to run multiple times — deduplication is built in.
+Safe to run multiple times -- deduplication is built in.
+
+When to run: one-time full-season catch-up (e.g., after a fresh DB seed).
+For targeted date ranges, use backfill_espn_games.py instead.
 
 Run from backend/:
     python -m scripts.backfill_games [--start YYYYMMDD]

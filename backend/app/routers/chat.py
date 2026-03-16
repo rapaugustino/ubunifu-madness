@@ -109,8 +109,8 @@ TOOLS = [
     {
         "name": "get_matchup_prediction",
         "description": (
-            "Get the V5 ML ensemble win probability prediction for a matchup between two teams. "
-            "Uses a 40-feature LR + LightGBM ensemble with smooth isotonic calibration, "
+            "Get the V6 ML ensemble win probability prediction for a matchup between two teams. "
+            "Uses a 43-feature LR + LightGBM ensemble with smooth isotonic calibration, "
             "incorporating Elo, adjusted efficiency (AdjEM), momentum, SOS, conference strength, "
             "and more. Returns each team's win probability, confidence level, tossup status, "
             "key stat comparisons, and a natural-language explanation of the top factors. "
@@ -213,7 +213,7 @@ TOOLS = [
         "description": (
             "Build a complete NCAA tournament bracket by predicting all 63 games. "
             "Requires tournament seeds to be available (after Selection Sunday). "
-            "Uses our V5 ML ensemble to predict each matchup round by round. "
+            "Uses our V6 ML ensemble to predict each matchup round by round. "
             "Supports strategies: 'chalk' (pick all favorites), 'balanced' (some upsets), "
             "'chaos' (maximize upsets). Use this when users ask to fill out their bracket, "
             "build a bracket, or ask for AI bracket picks."
@@ -332,7 +332,7 @@ def _exec_get_matchup(db: Session, gender: str, input_data: dict) -> dict:
     if not team_b:
         return {"error": f"Team not found: '{input_data['team_b_name']}'"}
 
-    # Use the V5 ML ensemble predictor (team_a is "away", team_b is "home")
+    # Use the V6 ML ensemble predictor (team_a is "away", team_b is "home")
     prob_a, source = predict_matchup(db, team_a.id, team_b.id)
 
     detail_a = _team_detail(db, team_a)
@@ -851,11 +851,11 @@ WHEN TO USE TOOLS vs. NOT:
 ABOUT UBUNIFU MADNESS (answer from this when users ask about the app):
 - Built by Richard Pallangyo for the Kaggle March ML Mania 2026 competition.
 
-PREDICTION SYSTEM — V5 ML ENSEMBLE:
-Live predictions use a trained LR (37.8%) + LightGBM (62.2%) ensemble model with 40 features and smooth isotonic calibration. Validation Brier score: 0.137, accuracy: 80%.
+PREDICTION SYSTEM — V6 ML ENSEMBLE:
+Live predictions use a trained LR (37.8%) + LightGBM (62.2%) ensemble model with 43 features and smooth isotonic calibration. Validation Brier score: 0.139, accuracy: 79.6%.
 
 Key features the model uses (as team-A-minus-team-B diffs):
-- Elo ratings (updated daily from ESPN, K=19.6, home advantage=90.9)
+- Elo ratings (updated daily from ESPN, K=21.8, home advantage=101.9)
 - Adjusted Efficiency Margin (AdjEM) — opponent-adjusted, home-court-corrected (±3.5)
 - Barthag (power rating), Pythagorean win %, luck factor
 - Strength of Schedule (SOS = average opponent Elo)
@@ -863,8 +863,9 @@ Key features the model uses (as team-A-minus-team-B diffs):
 - Momentum (last-10 win %, recent margin), coaching experience
 - Conference strength differential (avg Elo, NC win rate)
 - Game context: is_conf_tourney, is_ncaa_tourney, is_neutral_site, rest_days_diff
+- Volatility: margin standard deviation, close game percentage, upset vulnerability index
 
-Training: 163K games from 2012-2025 (all game types), recency-weighted with 5-season half-life (recent games matter ~7x more).
+Training: 165,640 games from 2012-2025 (all game types), recency-weighted with 5-season half-life (recent games matter ~7x more).
 
 Conference tournament compression: Women's conf tourney predictions are compressed 10% toward 50% to account for higher volatility. Men's conf tourney predictions use no compression (calibration showed it wasn't needed).
 

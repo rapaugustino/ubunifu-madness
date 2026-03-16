@@ -1,7 +1,11 @@
 """
-Import model predictions from submission CSV into PostgreSQL.
+Import model predictions from a submission CSV into the PostgreSQL predictions table.
 
-Parses rows like "2026_1101_1102,0.678" into the predictions table.
+Parses rows like "2026_1101_1102,0.678" into the predictions table, replacing
+any existing predictions for the same model version.
+
+When to run: after generating a new submission CSV from the notebook, to make
+predictions available to the app's lookup-based prediction path.
 
 Run from backend/:
     python -m scripts.import_predictions
@@ -21,7 +25,7 @@ SUBMISSION_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "notebooks"
     / "submissions"
-    / "stage2_submission_v5.csv"
+    / "stage2_submission_v6.csv"
 )
 
 
@@ -33,11 +37,11 @@ def main():
     session = SessionLocal()
 
     try:
-        # Clear existing v2 predictions
-        deleted = session.query(Prediction).filter(Prediction.model_version == "v5").delete()
+        # Clear existing v6 predictions
+        deleted = session.query(Prediction).filter(Prediction.model_version == "v6").delete()
         session.commit()
         if deleted:
-            print(f"Cleared {deleted} existing v2 predictions")
+            print(f"Cleared {deleted} existing v6 predictions")
 
         print(f"Loading predictions from {SUBMISSION_PATH}...")
         df = pd.read_csv(SUBMISSION_PATH)
@@ -60,7 +64,7 @@ def main():
                     team_a_id=team_a,
                     team_b_id=team_b,
                     win_prob_a=prob,
-                    model_version="v5",
+                    model_version="v6",
                     gender=gender,
                 )
             )

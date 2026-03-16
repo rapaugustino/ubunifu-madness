@@ -391,7 +391,7 @@ type BracketMode = "my_bracket" | "model" | "agent" | "consensus";
 
 const BRACKET_MODES: { key: BracketMode; label: string; description: string }[] = [
   { key: "my_bracket", label: "My Bracket", description: "Fill out your own picks" },
-  { key: "model", label: "Model", description: "V5 ML ensemble picks (chalk)" },
+  { key: "model", label: "Model", description: "V6 ML ensemble picks (chalk)" },
   { key: "agent", label: "Agent", description: "AI agent picks (balanced upsets)" },
   { key: "consensus", label: "Consensus", description: "Model + Agent combined" },
 ];

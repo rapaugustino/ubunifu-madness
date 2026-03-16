@@ -170,7 +170,7 @@ def _smooth_calibrate(calibrator, raw: float) -> float:
     if len(mid_x) < 2:
         return float(calibrator.predict(np.array([[raw]]))[0])
 
-    return float(np.clip(np.interp(raw, mid_x, mid_y), 0.02, 0.98))
+    return float(np.clip(np.interp(raw, mid_x, mid_y), 0.05, 0.95))
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +430,25 @@ def build_matchup_features(
     f["win_pct_a"] = float(stats_a.win_pct) if stats_a and stats_a.win_pct is not None else 0.5
     f["win_pct_b"] = float(stats_b.win_pct) if stats_b and stats_b.win_pct is not None else 0.5
 
+    # V6 volatility features
+    f["margin_stdev_diff"] = _safe_diff(
+        stats_a.margin_stdev if stats_a else None,
+        stats_b.margin_stdev if stats_b else None,
+    )
+    # close_game_pct = (close_wins + close_losses) / (wins + losses)
+    def _close_game_pct(s):
+        if not s or s.close_wins is None or s.wins is None:
+            return 0.0
+        total = (s.wins or 0) + (s.losses or 0)
+        if total == 0:
+            return 0.0
+        return ((s.close_wins or 0) + (s.close_losses or 0)) / total
+    f["close_game_pct_diff"] = _close_game_pct(stats_a) - _close_game_pct(stats_b)
+    f["upset_vulnerability_diff"] = _safe_diff(
+        stats_a.upset_vulnerability if stats_a else None,
+        stats_b.upset_vulnerability if stats_b else None,
+    )
+
     # Head-to-head record (kept for explanations only, removed from training
     # due to label leakage with conference tournament rematches)
     if "h2h_win_pct_diff" in feature_cols:
@@ -685,7 +704,7 @@ def predict_matchup(
                 if bundle.calibrator:
                     raw = _smooth_calibrate(bundle.calibrator, raw)
 
-                prob = float(np.clip(raw, 0.02, 0.98))
+                prob = float(np.clip(raw, 0.05, 0.95))
 
                 # Women's conf tourney games get 10% compression toward 50%.
                 # Men's conf tourney games need no compression (calibration is fine).
@@ -759,7 +778,7 @@ def predict_matchup(
     if is_conf_tourney:
         prob = 0.5 + (prob - 0.5) * CONF_TOURNEY_COMPRESSION
 
-    prob = float(np.clip(prob, 0.02, 0.98))
+    prob = float(np.clip(prob, 0.05, 0.95))
     prob = _recalibrate_high_confidence(prob)
     return prob, source
 

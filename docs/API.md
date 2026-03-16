@@ -204,7 +204,7 @@ Get head-to-head win probability.
   "teamB": { "id": 1211, "name": "Illinois" },
   "winProbA": 0.634,
   "winProbB": 0.366,
-  "modelVersion": "v5"
+  "modelVersion": "v6"
 }
 ```
 

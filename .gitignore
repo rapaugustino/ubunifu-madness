@@ -16,6 +16,11 @@ env/
 
 # Jupyter
 .ipynb_checkpoints/
+notebooks/*_executed.ipynb
+notebooks/generate_*.py
+notebooks/artifacts/
+notebooks/data/
+notebooks/submissions/
 
 # OS
 .DS_Store

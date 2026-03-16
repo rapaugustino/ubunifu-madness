@@ -1,6 +1,12 @@
 """
 Batch update game_results with detailed box score stats using raw SQL.
-Much faster than ORM row-by-row updates over a network connection.
+
+Much faster than ORM row-by-row updates over a network connection. Loads
+detailed CSV data into a temp staging table, then joins against game_results
+to apply all box score columns in a single UPDATE.
+
+When to run: one-time after seeding the DB, if detailed stats were not loaded
+by seed_db.py, or after importing new detailed CSV files from Kaggle.
 
 Run from backend/:
     python -m scripts.update_detailed_stats

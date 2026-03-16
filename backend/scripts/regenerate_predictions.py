@@ -6,6 +6,9 @@ This script:
 3. Creates new locked predictions using the current predictor (ml_ensemble)
 4. Resolves outcomes for completed games
 
+When to run: after model retraining or uploading new model artifacts, to
+re-score historical games with the updated model and fix accuracy metrics.
+
 Usage:
     cd backend
     python3 -m scripts.regenerate_predictions --from-date 20260308

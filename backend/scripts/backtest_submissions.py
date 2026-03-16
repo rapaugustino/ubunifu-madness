@@ -5,6 +5,9 @@ tournament outcomes. Computes Brier score, log-loss, accuracy, calibration,
 and per-season breakdowns. Supports comparing multiple submission versions
 side-by-side.
 
+When to run: after generating a new submission CSV, to validate model quality
+before submitting to Kaggle.
+
 Usage:
     cd backend
     # Backtest all Stage 1 submissions

@@ -6,7 +6,11 @@ A detailed walkthrough of the machine learning pipeline behind Ubunifu Madness �
 
 Given two NCAA basketball teams, predict the probability that Team A beats Team B in a tournament matchup. The output is a calibrated probability P(A wins) for every possible team pair in the tournament field (68 teams, ~2,278 pairs per gender).
 
-**Evaluation metric:** Brier score — the mean squared error of predicted probabilities vs actual outcomes (0 = perfect, 0.25 = coin flip).
+**Evaluation metric:** Brier score — the mean squared error of predicted probabilities vs actual outcomes:
+
+$$\text{Brier} = \frac{1}{N}\sum_{i=1}^{N}(p_i - o_i)^2$$
+
+where $p_i$ is the predicted probability and $o_i \in \{0, 1\}$ is the outcome. Lower is better ($0$ = perfect, $0.25$ = coin flip).
 
 ## Data Sources
 
@@ -56,7 +60,7 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
   - Raw win percentages as non-differenced features (LGB captures nonlinearities)
   - Season-based CV: train on 2012-2022, validate on 2023-2026
 
-### V5 (Current — March 2026)
+### V5 (Previous — March 2026)
 
 - **Training data:** Same as V4 — 2012-2025, ALL game types (163K+ games)
 - **Ensemble:** 37.8% LR + 62.2% LGB
@@ -71,7 +75,19 @@ All historical data comes from [Kaggle's March Machine Learning Mania](https://w
   - **Gender-specific conference tournament compression:** Women's conf tourney predictions compressed 10% toward 50% (factor 0.90); men's use no compression (factor 1.0). Based on calibration analysis of 270 conf tourney games showing women needed compression but men did not.
   - **Conference standings from ESPN:** New `conference_standings` table stores within-conference rankings (seed, conf record, home/away splits, streak, PPG) for both M and W, refreshed daily from ESPN standings API.
 
-**Notebook:** `notebooks/generate_v4_notebook.py` (generates `Ubunifu_Madness_V5.ipynb`)
+### V6 (Current — March 2026)
+
+- **Training data:** 2012-2025, ALL game types — **165,640 games**
+- **Ensemble:** 37.8% LR + 62.2% LGB
+- **Val Brier:** 0.139, **Val Accuracy:** 79.6% (2023-2026 holdout)
+- **43 features** across 10 categories (3 new over V5)
+- **Elo parameters re-tuned:** K=21.8, HOME_ADV=101.9, SEASON_REGRESSION=0.89
+- **Key improvements over V5:**
+  - **3 new volatility features:** `margin_stdev_diff` (scoring margin consistency), `close_game_pct_diff` (percentage of games decided by 5 or fewer points), `upset_vulnerability_diff` (composite upset risk score)
+  - **Tighter probability clipping:** [0.05, 0.95] (was [0.02, 0.98]), preventing extreme overconfidence on lopsided matchups
+  - **Re-tuned Elo parameters:** Higher K-factor (21.8 vs 19.6) makes ratings more responsive to recent results. Higher home advantage (101.9 vs 90.9) better captures venue effects. Lower season regression (0.89 vs 0.950) allows more regression toward mean between seasons, accounting for roster turnover
+
+**Notebook:** `notebooks/Ubunifu_Madness_V6.ipynb`
 
 ## Pipeline Overview
 
@@ -104,33 +120,32 @@ We compute custom Elo ratings for every team across all historical seasons. Elo 
 
 ### Elo Parameters (Optuna-Tuned on Modern Era)
 
-| Parameter | V2 Value | V3 Value | Search Range | Purpose |
-|-----------|----------|----------|-------------|---------|
-| K-Factor | 21.8 | **19.6** | 15-35 | How much a single game changes ratings |
-| Home Advantage | 101.9 | **90.9** | 50-150 | Elo points added for home team |
-| Season Regression | 0.89 | **0.950** | 0.70-0.95 | Carry-over between seasons (1.0 = no regression) |
-| Mean Elo | 1500 | 1500 | Fixed | Starting rating for new teams |
+| Parameter | V2 Value | V3/V5 Value | V6 Value | Search Range | Purpose |
+|-----------|----------|-------------|----------|-------------|---------|
+| K-Factor | 21.8 | 19.6 | **21.8** | 15-35 | How much a single game changes ratings |
+| Home Advantage | 101.9 | 90.9 | **101.9** | 50-150 | Elo points added for home team |
+| Season Regression | 0.89 | 0.950 | **0.89** | 0.70-0.95 | Carry-over between seasons (1.0 = no regression) |
+| Mean Elo | 1500 | 1500 | 1500 | Fixed | Starting rating for new teams |
 
-V3 tuning found: lower K (less reactive to single games), lower home advantage (reflecting neutral-site tournament play), and higher regression (more carry-over year to year — modern rosters are more stable due to NIL).
+V6 re-tuning found: higher K (more responsive to recent results), higher home advantage (better captures venue effects), and lower regression (more regression toward mean between seasons, accounting for roster turnover via transfer portal).
 
 ### Elo Update Formula
 
-```
-expected_win_prob(elo_a, elo_b) = 1 / (1 + 10^((elo_b - elo_a) / 400))
+$$E(A) = \frac{1}{1 + 10^{(R_B - R_A) / 400}}$$
 
-mov_multiplier = log(|margin| + 1) * (2.2 / (|elo_diff| * 0.001 + 2.2))
+$$M = \ln(|\text{margin}| + 1) \cdot \frac{2.2}{|\Delta R| \cdot 0.001 + 2.2}$$
 
-elo_change = K * mov_multiplier * (1 - expected_win_prob)
-```
+$$\Delta R = K \cdot M \cdot (S - E)$$
 
-The margin-of-victory (MOV) multiplier rewards dominant wins more, but is dampened when the Elo gap is already large (preventing runaway ratings for top teams beating weak opponents).
+where $K = 21.8$, $S \in \{0, 1\}$ is the actual outcome, and $E$ is the expected probability. The margin-of-victory multiplier $M$ rewards dominant wins but is dampened when the Elo gap is already large, preventing runaway ratings.
 
 **Season regression:** At the start of each season, every team's rating regresses toward the mean:
-```
-new_elo = mean_elo + regression_factor * (old_elo - mean_elo)
-```
 
-## Step 2: Feature Engineering (40 Features in V5)
+$$R_{\text{new}} = \mu + \alpha \cdot (R_{\text{old}} - \mu)$$
+
+where $\mu = 1500$ and $\alpha = 0.89$.
+
+## Step 2: Feature Engineering (43 Features in V6)
 
 Features are computed as **differences** between Team A and Team B (A - B), making the model symmetric.
 
@@ -222,6 +237,14 @@ Massey ordinals aggregate 15 ranking systems (POM, SAG, MOR, RPI, AP, etc.) take
 | `quality_win_pct_diff` | Win % against top-50 Elo teams |
 | `win_pct_a`, `win_pct_b` | Raw win percentages (non-differenced for LGB nonlinearities) |
 
+### Category 10: Volatility (3 features, new in V6)
+
+| Feature | Description |
+|---------|-------------|
+| `margin_stdev_diff` | Standard deviation of game-by-game scoring margin (consistency) |
+| `close_game_pct_diff` | Percentage of games decided by 5 or fewer points |
+| `upset_vulnerability_diff` | Composite upset risk score (margin volatility, luck, 3PT reliance, FT%) |
+
 ## Advanced Analytics (Dashboard)
 
 The following metrics are computed by `compute_advanced_stats()` and displayed on the frontend power rankings dashboard. AdjEM, Barthag, and quality win % are also used as model features.
@@ -230,45 +253,41 @@ The following metrics are computed by `compute_advanced_stats()` and displayed o
 
 Inspired by KenPom's methodology. Raw per-100-possession offensive and defensive efficiency are adjusted iteratively (10 iterations) by opponent strength:
 
-```
-For each iteration:
-  AdjOE_team = raw_OE_team × (national_avg_DE / avg_opponent_AdjDE)
-  AdjDE_team = raw_DE_team × (national_avg_OE / avg_opponent_AdjOE)
-  AdjEM = AdjOE - AdjDE
-```
+$$\text{AdjOE}_i = \text{RawOE}_i \cdot \frac{\overline{\text{AdjDE}}_{\text{national}}}{\overline{\text{AdjDE}}_{\text{opponents}}}$$
+
+$$\text{AdjDE}_i = \text{RawDE}_i \cdot \frac{\overline{\text{AdjOE}}_{\text{national}}}{\overline{\text{AdjOE}}_{\text{opponents}}}$$
+
+$$\text{AdjEM} = \text{AdjOE} - \text{AdjDE}$$
 
 This ensures a team that plays a tough schedule gets credit for maintaining efficiency against strong defenses, and vice versa.
 
-**V5 Update:** Home court adjustment (±3.5 efficiency points, KenPom-style) is applied per-game before aggregation. Home team's raw offense is deflated by 1.75 pts/100 poss and defense inflated by 1.75, neutralizing venue advantage. This produces more accurate AdjEM for teams with heavy home schedules.
+**Home court adjustment:** A $\pm 3.5$ efficiency point adjustment (KenPom-style) is applied per-game before aggregation. Home team offense is deflated by 1.75 pts/100 poss and defense inflated by 1.75, neutralizing venue advantage.
 
 ### Barthag (Win Probability vs Average D1 Team)
 
 Borrowed from T-Rank/BartTorvik. Uses the Pythagorean formula with exponent 11.5:
 
-```
-Barthag = AdjOE^11.5 / (AdjOE^11.5 + AdjDE^11.5)
-```
+$$\text{Barthag} = \frac{\text{AdjOE}^{11.5}}{\text{AdjOE}^{11.5} + \text{AdjDE}^{11.5}}$$
 
 Represents the probability a team would beat the average D1 team on a neutral court. Elite teams approach 0.98+; average teams sit near 0.50.
 
 ### Pythagorean Win % and Luck
 
-Expected win percentage derived from total points scored and allowed (exponent 9):
+Expected win percentage derived from total points scored and allowed:
 
-```
-PythWin% = PtsScored^9 / (PtsScored^9 + PtsAllowed^9)
-Luck = ActualWin% - PythWin%
-```
+$$\text{PythWin\%} = \frac{\text{PtsScored}^{9}}{\text{PtsScored}^{9} + \text{PtsAllowed}^{9}}$$
 
-Positive luck means the team has won more games than their point differential suggests (often via close wins). Negative luck indicates the opposite. Luck tends to regress, making it a useful indicator of future performance.
+$$\text{Luck} = \text{ActualWin\%} - \text{PythWin\%}$$
+
+Positive luck means the team has won more games than their point differential suggests (often via close wins). Luck tends to regress, making it a useful predictor of future performance.
 
 ### Shooting Metrics
 
 | Metric | Formula | Description |
 |--------|---------|-------------|
-| True Shooting % | `PTS / (2 × (FGA + 0.44 × FTA))` | Captures all scoring efficiency including FTs and 3s |
-| 3-Point Attempt Rate (3PAr) | `FGA3 / FGA` | Proportion of shots taken from 3; higher = more variance |
-| AST:TO Ratio | `AST / TO` | Ball security and offensive organization |
+| True Shooting % | $\frac{\text{PTS}}{2 \times (\text{FGA} + 0.44 \times \text{FTA})}$ | Captures all scoring efficiency including FTs and 3s |
+| 3-Point Attempt Rate | $\frac{\text{FGA3}}{\text{FGA}}$ | Proportion of shots taken from 3; higher = more variance |
+| AST:TO Ratio | $\frac{\text{AST}}{\text{TO}}$ | Ball security and offensive organization |
 
 ### Defensive Metrics
 
@@ -322,7 +341,7 @@ Higher values indicate greater upset vulnerability. This metric is exclusive to 
 | Tempo | Possessions per game (pace of play) |
 | SOS | Strength of schedule (average opponent Elo) |
 
-**V5 Update:** AdjEM, Barthag, and quality win % are model features alongside game context flags and external rankings. Power ratings weight AdjEM (35%) + Elo (25%) + SOS (15%) + Barthag (15%) + Win% (5%) + Momentum (5%). Efficiency-based metrics (AdjEM + Barthag) account for 50% of the composite, with Elo elevated to 25% as our top single predictive feature.
+**V6 Update:** AdjEM, Barthag, and quality win % are model features alongside game context flags and external rankings. Power ratings weight AdjEM (35%) + Elo (25%) + SOS (15%) + Barthag (15%) + Win% (5%) + Momentum (5%). Efficiency-based metrics (AdjEM + Barthag) account for 50% of the composite, with Elo elevated to 25% as our top single predictive feature.
 
 ## Step 3: Model Training
 
@@ -342,7 +361,7 @@ This is critical because:
 | Logistic Regression | 0.1651 | 0.1612 | — | Reliable baseline |
 | LightGBM | 0.1697 | 0.1589 | — | Improved with modern-era tuning |
 | Ensemble (pre-calibration) | 0.1646 | 0.1575 | — | LR+LGB weighted average |
-| **Ensemble (calibrated)** | **0.1607** | **0.1543** | **0.137** | V5: 163K games, 40 features, recency-weighted |
+| **Ensemble (calibrated)** | **0.1607** | **0.1543** | **0.139** | V6: 165,640 games, 43 features, recency-weighted |
 
 In V3, LightGBM significantly improved with Optuna-tuned hyperparameters on modern data, flipping from worse-than-LR to better-than-LR.
 
@@ -434,7 +453,7 @@ Games where the model's confidence is below 55% are classified as **tossups** an
 
 During the season, the predictor operates in a 3-layer cascade:
 
-1. **`ml_ensemble`** — V5 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. 40 features built from live DB state. Highest quality.
+1. **`ml_ensemble`** — V6 model artifacts (LR + LGB + smooth calibrator) loaded from the `model_artifacts` DB table. 43 features built from live DB state. Highest quality.
 2. **`blended`** / **`live_blend`** — Fallback if artifacts unavailable. Blends Elo (60%) + SOS-adjusted record (40%).
 3. **`no_data`** — Absolute fallback: 50%.
 
@@ -474,9 +493,9 @@ After deploying V3 with smooth calibration on March 10, 2026:
 
 Basketball changed fundamentally: the 3-point revolution (Steph Curry era), transfer portal (player mobility), and NIL (talent distribution) make pre-2012 data misleading. Training on all 41 years would dilute the signal from modern-era patterns that matter most for current predictions.
 
-### Evolution from V3 to V5
+### Evolution from V3 to V6
 
-V3 trained on ~4,300 tournament games only. V4 expanded to 163K+ games across all game types with game-context features (`is_conf_tourney`, `is_ncaa_tourney`). V5 added recency-weighted training (5-season half-life, so 2025 games are weighted ~7x more than 2012) and KenPom-style home court adjustment for more accurate efficiency metrics.
+V3 trained on ~4,300 tournament games only. V4 expanded to 163K+ games across all game types with game-context features (`is_conf_tourney`, `is_ncaa_tourney`). V5 added recency-weighted training (5-season half-life, so 2025 games are weighted ~7x more than 2012) and KenPom-style home court adjustment for more accurate efficiency metrics. V6 added 3 volatility features (margin_stdev, close_game_pct, upset_vulnerability), re-tuned Elo parameters, and tightened probability clipping to [0.05, 0.95].
 
 ### Solving calibration clustering
 
@@ -492,7 +511,7 @@ The transfer portal (2018+) and NIL (2021+) changed how rosters are built. A 202
 
 ### Comparison to Vegas lines
 
-Our V5 validation Brier of 0.137 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have access to.
+Our V6 validation Brier of 0.139 is competitive with Vegas closing lines (~0.14). The remaining gap comes from injury reports, betting market information, and real-time lineup data we don't have access to.
 
 ### Why head-to-head record was rejected
 

@@ -10,7 +10,7 @@ A comprehensive guide to understanding, explaining, and extending the Ubunifu Ma
 2. [Architecture Overview](#2-architecture-overview)
 3. [Data Pipeline — Where the Data Comes From](#3-data-pipeline)
 4. [Elo Rating System — The Foundation](#4-elo-rating-system)
-5. [Feature Engineering — The 40 Features](#5-feature-engineering)
+5. [Feature Engineering — The 43 Features](#5-feature-engineering)
 6. [The ML Model — Training, Ensemble, Calibration](#6-the-ml-model)
 7. [Prediction Pipeline — From Model to User](#7-prediction-pipeline)
 8. [Advanced Analytics — AdjEM, Barthag, Power Ratings](#8-advanced-analytics)
@@ -131,7 +131,7 @@ flowchart LR
     end
 
     subgraph Train["Model Training"]
-        C --> G["generate_v4_notebook.py<br/><i>Train V5 ensemble</i>"]
+        C --> G["Ubunifu_Madness_V6.ipynb<br/><i>Train V6 ensemble</i>"]
         G --> H["Model Artifacts<br/><i>.joblib files</i>"]
         H --> I["upload_model_artifacts.py"]
         I --> C
@@ -153,8 +153,8 @@ Process every game from 2012-2026 to compute:
 **Step 3 — Map ESPN IDs** (`scripts/map_espn_ids.py`):
 Kaggle and ESPN use different team IDs. This script fuzzy-matches team names and stores the mapping in `data/espn_team_map.json` and the `teams.espn_id` column.
 
-**Step 4 — Train the model** (`notebooks/generate_v4_notebook.py`):
-Generates and executes a Jupyter notebook that trains the V5 ensemble model. Outputs model artifacts (`.joblib` files) and submission CSVs.
+**Step 4 — Train the model** (`notebooks/Ubunifu_Madness_V6.ipynb`):
+The training notebook builds the V6 ensemble model (LR + LightGBM with isotonic calibration). Outputs model artifacts (`.joblib` files) and Kaggle submission CSVs.
 
 **Step 5 — Upload artifacts** (`scripts/upload_model_artifacts.py`):
 Serializes the trained LR, LightGBM, and calibrator models as binary blobs and stores them in the `model_artifacts` DB table with `is_active=True`.
@@ -181,34 +181,36 @@ Elo is a dynamic rating system originally designed for chess. Every team starts 
 
 | Parameter | Value | What it controls |
 |-----------|-------|-----------------|
-| K-Factor | 19.6 | Sensitivity to each game result (higher = more reactive) |
-| Home Advantage | 90.9 | Elo points added for home team |
-| Season Regression | 0.950 | How much rating carries over between seasons (1.0 = full carry) |
+| K-Factor | 21.8 | Sensitivity to each game result (higher = more reactive) |
+| Home Advantage | 101.9 | Elo points added for home team |
+| Season Regression | 0.89 | How much rating carries over between seasons (1.0 = full carry) |
 | Mean Elo | 1500 | Starting point for new teams |
 
 ### The update formula
 
-```python
-# Expected probability based on Elo difference
-expected = 1 / (1 + 10^((elo_opponent - elo_team) / 400))
+**Expected win probability** based on Elo difference:
 
-# Margin-of-victory multiplier (larger wins = bigger update, but diminishing)
-mov_multiplier = log(|margin| + 1) * (2.2 / (|elo_diff| * 0.001 + 2.2))
+$$E = \frac{1}{1 + 10^{(R_{\text{opp}} - R_{\text{team}}) / 400}}$$
 
-# Elo change
-delta = K * mov_multiplier * (actual_outcome - expected)
-```
+**Margin-of-victory multiplier** (larger wins produce bigger updates, with diminishing returns):
 
-The `mov_multiplier` has an auto-correlation correction: `2.2 / (|elo_diff| * 0.001 + 2.2)`. This prevents the "strong team beats weak team by 30 -> gains too many points" problem. If a 2000-Elo team beats a 1200-Elo team by 30, the multiplier is dampened because that blowout was expected.
+$$M = \ln(|\text{margin}| + 1) \cdot \frac{2.2}{|\Delta R| \cdot 0.001 + 2.2}$$
+
+The second factor is an auto-correlation correction that prevents the "strong team beats weak team by 30 and gains too many points" problem. When a 2000-Elo team blows out a 1200-Elo team, the multiplier is dampened because that blowout was expected.
+
+**Elo update**:
+
+$$\Delta R = K \cdot M \cdot (S - E)$$
+
+where $S = 1$ for a win, $S = 0$ for a loss, $K = 21.8$.
 
 ### Season regression
 
-At the start of each season:
-```python
-new_elo = 1500 + 0.950 * (old_elo - 1500)
-```
+At the start of each season, ratings regress toward the mean:
 
-A team at 2000 regresses to 1975. This captures roster turnover, graduation, and transfers — but our high regression factor (0.95) reflects that in the NIL/transfer portal era, top programs stay elite year-over-year.
+$$R_{\text{new}} = \mu + \alpha \cdot (R_{\text{old}} - \mu)$$
+
+where $\mu = 1500$ (mean Elo) and $\alpha = 0.89$ (regression factor). A team at 2000 regresses to 1945. This moderate regression factor balances continuity with the reality that roster turnover (transfer portal, NIL) means teams change meaningfully between seasons.
 
 ### Important nuance: gender separation
 
@@ -228,7 +230,7 @@ Men's and women's Elo pools are completely independent. Women's Elo runs ~245 po
 
 Every feature is computed as a **difference** between Team A and Team B: `feature_diff = team_a_value - team_b_value`. This transforms the problem from "how good is each team independently" to "how do they compare on each dimension." The model learns which dimensions matter most.
 
-### All 40 features, explained
+### All 43 features, explained
 
 **Category 1: Elo (4 features)**
 
@@ -335,7 +337,7 @@ The "Four Factors" are the core basketball analytics identified by Dean Oliver:
 
 ### Where to find this code
 
-- Feature computation for training: `notebooks/generate_v4_notebook.py` (Part 3: Feature Engineering)
+- Feature computation for training: `notebooks/Ubunifu_Madness_V6.ipynb` (Part 3: Feature Engineering)
 - Feature computation for live predictions: `backend/app/services/predictor.py` -> `build_matchup_features()`
 
 ---
@@ -375,7 +377,7 @@ A gradient-boosted decision tree ensemble. Hyperparameters tuned via Optuna (Bay
 
 ```mermaid
 flowchart LR
-    F["40 Features"] --> LR["Logistic Regression<br/><i>37.8% weight</i>"]
+    F["43 Features"] --> LR["Logistic Regression<br/><i>37.8% weight</i>"]
     F --> LGB["LightGBM<br/><i>62.2% weight</i>"]
     LR --> E["Weighted Average"]
     LGB --> E
@@ -468,14 +470,14 @@ Men's conference tournaments don't need compression (our calibration analysis sh
 
 | Metric | Value |
 |--------|-------|
-| Validation Brier Score | 0.137 |
-| Validation Accuracy | 80.0% |
+| Validation Brier Score | 0.139 |
+| Validation Accuracy | 79.6% |
 | Best Tournament Season | 2025: Brier 0.126, 85.8% accuracy |
 | Live Accuracy (2026) | ~69-70% (includes tossups excluded from official metrics) |
 
 ### Where to find this code
 
-- Training pipeline: `notebooks/generate_v4_notebook.py`
+- Training pipeline: `notebooks/Ubunifu_Madness_V6.ipynb`
 - Live prediction: `backend/app/services/predictor.py`
 - Model artifacts in DB: `backend/app/models/model_artifact.py`
 - Artifact upload: `backend/scripts/upload_model_artifacts.py`
@@ -492,7 +494,7 @@ flowchart TD
     B --> C["compare.py router<br/>receives request"]
     C --> D["predictor.predict_matchup(db, 1181, 1163)"]
     D --> E["load_model_bundle()<br/><i>LR, LGB, calibrator from DB (cached)</i>"]
-    E --> F["build_matchup_features()<br/><i>Queries DB for all 40 features</i>"]
+    E --> F["build_matchup_features()<br/><i>Queries DB for all 43 features</i>"]
     F --> G["Ensemble: 0.378 × LR + 0.622 × LGB"]
     G --> H["Smooth isotonic calibration"]
     H --> I{"Conf tourney?"}
@@ -553,33 +555,29 @@ When the model's confidence is below 55% (neither team favored above 55%), the g
 
 Raw offensive/defensive efficiency doesn't account for opponent quality. A team with 110 points per 100 possessions against weak opponents is different from one achieving 105 against elite defenses.
 
-**How we compute it:**
-1. Start with raw offensive/defensive efficiency for every team
-2. Iteratively adjust: if you scored 110 against a team with defense ranked 5th, that's more impressive than 110 against a team ranked 300th
-3. Repeat for 10 iterations until values converge
+**Iterative adjustment (10 iterations):**
 
-```python
-for iteration in range(10):
-    for team in all_teams:
-        # Adjust offense by opponent defensive strength
-        adj_oe = raw_oe * (national_avg_de / avg_opponent_adj_de)
-        # Adjust defense by opponent offensive strength
-        adj_de = raw_de * (national_avg_oe / avg_opponent_adj_oe)
+For each team, raw efficiency is adjusted by opponent quality:
 
-    AdjEM = adj_oe - adj_de  # Positive = good, negative = bad
-```
+$$\text{AdjOE}_i = \text{RawOE}_i \cdot \frac{\overline{\text{AdjDE}}_{\text{national}}}{\overline{\text{AdjDE}}_{\text{opponents}}}$$
 
-**V5 home court adjustment:** Before aggregation, we adjust each game's efficiency by ±3.5 points per 100 possessions (KenPom-style). Home teams have their offense deflated by 1.75 and defense inflated by 1.75. This neutralizes venue advantage so AdjEM reflects true team quality.
+$$\text{AdjDE}_i = \text{RawDE}_i \cdot \frac{\overline{\text{AdjOE}}_{\text{national}}}{\overline{\text{AdjOE}}_{\text{opponents}}}$$
+
+The final efficiency margin is the difference:
+
+$$\text{AdjEM} = \text{AdjOE} - \text{AdjDE}$$
+
+Positive values indicate a team scores more efficiently than it allows. The iterative process converges because each team's adjustment depends on its opponents' adjusted values, which in turn depend on their opponents.
+
+**Home court adjustment:** Before aggregation, each game's efficiency is adjusted by $\pm 3.5$ points per 100 possessions (KenPom-style). Home teams have their offense deflated by 1.75 and defense inflated by 1.75, neutralizing venue advantage.
 
 ### Barthag
 
 Barthag estimates the probability a team would beat an average D1 team:
 
-```python
-Barthag = AdjOE^11.5 / (AdjOE^11.5 + AdjDE^11.5)
-```
+$$\text{Barthag} = \frac{\text{AdjOE}^{11.5}}{\text{AdjOE}^{11.5} + \text{AdjDE}^{11.5}}$$
 
-The exponent 11.5 comes from empirical basketball research. A team with AdjOE=110 and AdjDE=95 has Barthag ≈ 0.95 (beats an average team 95% of the time).
+The exponent 11.5 comes from empirical basketball research (Barttorvik). A team with AdjOE = 110 and AdjDE = 95 yields $\text{Barthag} \approx 0.95$, meaning it would beat an average team 95% of the time.
 
 ### Power Ratings
 
@@ -751,7 +749,7 @@ The frontend sends `gender: "M"` or `gender: "W"` with every chat request. All t
 | Chat | `/chat` | AI Madness Agent chat interface |
 | Performance | `/performance` | Daily accuracy chart, calibration curve, game-by-game log |
 | Players | `/players` | Player leaderboard by stats or importance |
-| About | `/about` | Full methodology explanation, V5 model details |
+| About | `/about` | Full methodology explanation, V6 model details |
 
 ### Key frontend patterns
 
@@ -805,7 +803,7 @@ The pipeline is designed to be safe to re-run:
 
 ## 12b. Bracket Generation — Model, Agent, and Consensus
 
-The app generates three types of official brackets, each using a different strategy. All three use the live V5 ML ensemble predictor for win probabilities, applied to NCAA tournament matchups (neutral site, tournament context flags enabled).
+The app generates three types of official brackets, each using a different strategy. All three use the live V6 ML ensemble predictor for win probabilities, applied to NCAA tournament matchups (neutral site, tournament context flags enabled).
 
 ### Model Bracket (Chalk)
 
@@ -1046,7 +1044,7 @@ Intellectual honesty. If you allow retroactive adjustments, you can make your ac
 
 ### What does this project do?
 
-Ubunifu Madness is an end-to-end NCAA basketball prediction platform built for the Kaggle March Machine Learning Mania competition. It uses a LightGBM + Logistic Regression ensemble trained on 163,000 games with 40 features covering Elo ratings, efficiency metrics, and conference strength. The model achieves 80% accuracy on held-out tournament games. Beyond the model, there is a full-stack app with Next.js and FastAPI that shows live predictions, power rankings, and has an AI chat agent powered by Claude that can answer natural-language basketball questions using six data tools. The entire pipeline — Elo updates, stats computation, prediction locking — runs automatically every day.
+Ubunifu Madness is an end-to-end NCAA basketball prediction platform built for the Kaggle March Machine Learning Mania competition. It uses a LightGBM + Logistic Regression ensemble trained on 165,640 games with 43 features covering Elo ratings, efficiency metrics, and conference strength. The model achieves 79.6% accuracy on held-out tournament games. Beyond the model, there is a full-stack app with Next.js and FastAPI that shows live predictions, power rankings, and has an AI chat agent powered by Claude that can answer natural-language basketball questions using six data tools. The entire pipeline — Elo updates, stats computation, prediction locking — runs automatically every day.
 
 ### "What was the hardest technical challenge?"
 
@@ -1169,16 +1167,13 @@ frontend/
 
 ```
 notebooks/
-├── generate_v4_notebook.py      # Generates V5 training notebook programmatically
-├── Ubunifu_Madness_V5.ipynb     # Generated + executed notebook
-├── artifacts/                   # Trained model files
-│   ├── lr_v5.joblib             # Logistic Regression model
-│   ├── lgb_v5.joblib            # LightGBM model
-│   ├── calibrator_v5.joblib     # Isotonic calibrator
-│   └── model_metadata_v5.json   # Feature columns, weights, config
-└── submissions/                 # Kaggle submission CSVs
-    ├── stage1_submission_v3.csv
-    ├── stage2_submission_v5.csv
+├── Ubunifu_Madness_V6.ipynb     # V6 training notebook (LR + LightGBM ensemble)
+├── artifacts/                   # Trained model files (not in git)
+│   ├── lr_v6.joblib             # Logistic Regression model
+│   ├── lgb_v6.joblib            # LightGBM model
+│   ├── calibrator_v6.joblib     # Isotonic calibrator
+│   └── model_metadata_v6.json   # Feature columns, weights, config
+└── submissions/                 # Kaggle submission CSVs (not in git)
     └── ...
 ```
 

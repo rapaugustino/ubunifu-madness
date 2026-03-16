@@ -8,8 +8,12 @@ Seeding order (FK constraints):
 4. TourneySeeds (M + W)
 5. GameResults (compact + detailed, regular + tourney, M + W)
 
+When to run: one-time setup when initializing a fresh database, or with
+--seeds-only SEASON to add tournament seeds for a new season.
+
 Run from backend/:
     python -m scripts.seed_db
+    python -m scripts.seed_db --seeds-only 2026
 """
 
 import sys

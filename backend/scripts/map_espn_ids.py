@@ -1,4 +1,14 @@
-"""Map Kaggle team IDs to ESPN team IDs using team name matching."""
+"""Map Kaggle team IDs to ESPN team IDs using team name fuzzy matching.
+
+Fetches the ESPN teams API, matches against Kaggle team names and spelling
+variants, then updates the Team table with espn_id, logo_url, and color.
+Also writes a JSON mapping file to data/espn_team_map.json.
+
+When to run: one-time setup after seeding the DB, or when ESPN adds/renames teams.
+
+Run from backend/:
+    python -m scripts.map_espn_ids
+"""
 
 import csv
 import json

@@ -16,11 +16,11 @@ export default function AboutPage() {
             Every team starts at 1500. After each game, the winner gains points and the loser
             drops by the same amount. How many points depends on three things: how likely the
             win was (upsets move the needle more), the margin of victory, and whether the game
-            was at home or away. We apply a 90.9-point home court advantage and use a K-factor
-            of 19.6 — tuned via Optuna optimization to balance responsiveness with stability.
+            was at home or away. We apply a 101.9-point home court advantage and use a K-factor
+            of 21.8 — tuned via Optuna optimization to balance responsiveness with stability.
           </p>
           <p>
-            Between seasons, every team&apos;s rating regresses 5% toward 1500. This prevents
+            Between seasons, every team&apos;s rating regresses 11% toward 1500. This prevents
             ratings from inflating over time and accounts for roster turnover. Ratings update
             daily from ESPN game results using the exact same formula used to process 41 years
             of historical games.
@@ -78,10 +78,10 @@ export default function AboutPage() {
         <h2 className="text-xl font-semibold mb-3">ML Ensemble Prediction System</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            Predictions are powered by a V5 ML ensemble model that builds features from live
+            Predictions are powered by a V6 ML ensemble model that builds features from live
             database state — Elo, efficiency, records, rankings — and outputs a calibrated win
-            probability. The model is trained on 163,000+ games (regular season, conference
-            tournaments, and NCAA tournaments from 2012–2025) using 40 features.
+            probability. The model is trained on 165,640 games (regular season, conference
+            tournaments, and NCAA tournaments from 2012–2025) using 43 features.
           </p>
           <p>
             The model uses <strong>game-type context</strong> as a feature — it knows whether
@@ -121,13 +121,13 @@ export default function AboutPage() {
 
       {/* ML Model */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold mb-3">V5 Model Details</h2>
+        <h2 className="text-xl font-semibold mb-3">V6 Model Details</h2>
         <div className="text-sm text-muted leading-relaxed space-y-3">
           <p>
-            The V5 model is an ensemble of Logistic Regression (37.8%) and LightGBM (62.2%),
-            trained on 163,000+ men&apos;s and women&apos;s games from 2012–2025 across all game
+            The V6 model is an ensemble of Logistic Regression (37.8%) and LightGBM (62.2%),
+            trained on 165,640 men&apos;s and women&apos;s games from 2012–2025 across all game
             types with recency-weighted training (5-season half-life — recent games matter ~7x more).
-            It uses 40 features organized into nine categories:
+            It uses 43 features organized into ten categories:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li><strong>Elo:</strong> Current rating, rating difference, expected win probability</li>
@@ -139,11 +139,12 @@ export default function AboutPage() {
             <li><strong>Momentum:</strong> Last 10 games win percentage and margin of victory</li>
             <li><strong>Game Context:</strong> Is conference tournament, is NCAA tournament, is neutral site, rest days difference</li>
             <li><strong>Quality:</strong> Win percentage vs top-50 Elo teams, Barthag, coach tenure, raw win percentages</li>
+            <li><strong>Volatility:</strong> Margin standard deviation, close game percentage, upset vulnerability index</li>
           </ul>
           <p>
             Smooth isotonic calibration ensures well-distributed probabilities.
             LR provides stable baselines while LGB captures non-linear interactions.
-            Validation Brier score: 0.137, accuracy: 80.0% on 2023–2026 holdout.
+            Validation Brier score: 0.139, accuracy: 79.6% on 2023–2026 holdout.
           </p>
         </div>
       </section>
@@ -225,7 +226,7 @@ export default function AboutPage() {
               probabilities to inform your decisions.
             </li>
             <li>
-              <strong>Model Bracket:</strong> Every game is decided by the V5 ML
+              <strong>Model Bracket:</strong> Every game is decided by the V6 ML
               ensemble, always picking the statistical favorite (chalk strategy).
               Generated once after Selection Sunday and permanently locked.
             </li>

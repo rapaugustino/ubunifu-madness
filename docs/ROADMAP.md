@@ -6,9 +6,9 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 
 ## Completed
 
-- Elo rating system with Optuna-tuned parameters (K=19.6, HOME_ADV=90.9)
-- V5 LR + LightGBM ensemble model (Val Brier: 0.137, 80% accuracy, 163K recency-weighted training games)
-- 40-feature pipeline with smooth isotonic calibration
+- Elo rating system with Optuna-tuned parameters (K=21.8, HOME_ADV=101.9)
+- V6 LR + LightGBM ensemble model (Val Brier: 0.139, 79.6% accuracy, 165,640 recency-weighted training games)
+- 43-feature pipeline with smooth isotonic calibration
 - Live ESPN scores integration with background refresh
 - AI Madness Agent chat with streaming responses and 6 tools
 - Interactive bracket visualization
@@ -21,7 +21,7 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 - Full-roster team rankings with pagination (all D1 teams)
 - Methodology / How It Works page with transparent documentation
 - Terms, disclaimers, and data attribution
-- **V5 ML ensemble** — 40-feature LR+LGB model with recency-weighted training (5-season half-life), home court adjusted AdjEM, and feature-diff based explanations
+- **V6 ML ensemble** — 43-feature LR+LGB model with recency-weighted training (5-season half-life), home court adjusted AdjEM, and feature-diff based explanations
 - **Live prediction recomputation** — predictions built from live DB state (Elo, efficiency, rankings, quality wins)
 - **Tossup handling** — games with <55% confidence labeled as TOSSUP
 - **Strength of schedule (SOS)** — computed live from all season game results, refreshed daily
@@ -38,7 +38,7 @@ Enhancement ideas organized by impact and effort. Focused on: accurate predictio
 ## High Impact, Medium Effort
 
 ### ~~Live Prediction Recomputation~~ ✓ DONE
-Implemented via the V4 ML ensemble. Predictions use 40 features built from live DB state — Elo, adjusted efficiency, quality wins, game context, rankings, and more. The model builds features fresh for every matchup from the database.
+Implemented via the ML ensemble. Predictions use 43 features built from live DB state — Elo, adjusted efficiency, quality wins, game context, rankings, and more. The model builds features fresh for every matchup from the database.
 
 ### Player Impact Modeling
 Injuries and transfers are the biggest blind spot. A star player being out can swing a game 5-10 points.

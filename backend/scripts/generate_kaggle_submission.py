@@ -1,25 +1,19 @@
 """
 Generate a Kaggle Stage 2 submission from live app predictions.
 
-Pulls probabilities from the live V5 ML ensemble (same model that powers
-the app) for all possible 2026 tournament matchups. For matchups already
-predicted and locked in GamePrediction, uses those locked values to stay
-consistent with the app. For all others, computes fresh predictions.
+Generate a Kaggle Stage 2 submission from the live V6 ML ensemble.
 
-This gives you a submission that reflects the exact same model and data
-state as the live app, rather than a stale notebook export.
+Pulls probabilities from the same model that powers the app for all
+possible 2026 tournament matchups. For matchups already predicted and
+locked in GamePrediction, uses those locked values for consistency.
+For all others, computes fresh predictions.
+
+When to run: before each Kaggle submission deadline (Stage 1 and Stage 2),
+after model artifacts have been uploaded and daily cron has run.
 
 Usage:
     cd backend
-
-    # Generate raw submission
-    python3 -m scripts.generate_kaggle_submission
-
-    # Generate and calibrate in one step
-    python3 -m scripts.generate_kaggle_submission --calibrate
-
-    # Specify output path
-    python3 -m scripts.generate_kaggle_submission -o ../notebooks/submissions/stage2_live_v5.csv
+    python3 -m scripts.generate_kaggle_submission -o ../notebooks/submissions/stage2_submission.csv
 """
 
 import argparse
@@ -87,15 +81,15 @@ def main():
                         help="Output CSV path (default: stage2_live_v5.csv in submissions/)")
     parser.add_argument("--calibrate", action="store_true",
                         help="Run calibrate_submission.py on the output after generation")
-    parser.add_argument("--clip-min", type=float, default=0.03,
-                        help="Min probability for clipping (default: 0.03)")
-    parser.add_argument("--clip-max", type=float, default=0.97,
-                        help="Max probability for clipping (default: 0.97)")
+    parser.add_argument("--clip-min", type=float, default=0.05,
+                        help="Min probability for clipping (default: 0.05)")
+    parser.add_argument("--clip-max", type=float, default=0.95,
+                        help="Max probability for clipping (default: 0.95)")
     parser.add_argument("--gender", type=str, default=None,
                         help="Generate for one gender only (M or W)")
     args = parser.parse_args()
 
-    output_path = Path(args.output) if args.output else SUBMISSIONS_DIR / "stage2_live_v5.csv"
+    output_path = Path(args.output) if args.output else SUBMISSIONS_DIR / "stage2_submission.csv"
 
     db = SessionLocal()
     reload_model_bundle()

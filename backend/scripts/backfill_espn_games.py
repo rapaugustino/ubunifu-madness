@@ -1,9 +1,12 @@
 """
-Backfill game results from ESPN for a date range.
+Backfill game results from ESPN for a specific date range.
 
 Loops through each date, fetching completed games and ingesting any that
-are missing from the game_results table. Also updates Elo, W/L stats,
+are missing from the game_results table. Also updates Elo, W/L records,
 conference strength, and SOS.
+
+When to run: one-time catch-up when the daily cron missed days, or when
+bootstrapping a new deployment with historical game data.
 
 Run from backend/:
     python -m scripts.backfill_espn_games --from 20251101 --to 20260309

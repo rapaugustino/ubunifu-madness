@@ -210,14 +210,14 @@ export default function PerformancePage() {
             <div className="bg-card border border-card-border rounded-xl p-4">
               <div className="text-xs text-muted mb-3 flex items-center gap-2">
                 Accuracy by Prediction Source
-                <Tooltip text="Different prediction methods are used depending on data availability. ML Ensemble uses the trained V5 model (40 features). Live Blend uses Elo ratings and SOS-adjusted records as a fallback.">
+                <Tooltip text="Different prediction methods are used depending on data availability. ML Ensemble uses the trained V6 model (43 features). Live Blend uses Elo ratings and SOS-adjusted records as a fallback.">
                   <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
                 </Tooltip>
               </div>
               <div className="flex flex-wrap gap-4">
                 {Object.entries(summary!.bySource).map(([src, data]) => {
                   const label: Record<string, string> = {
-                    "ml_ensemble": "ML Ensemble (V5)",
+                    "ml_ensemble": "ML Ensemble (V6)",
                     "blended": "Blended (Elo + Record fallback)",
                     "live_blend": "Live Blend (Elo + Record fallback)",
                     "elo_fallback": "Elo Only",
@@ -260,14 +260,8 @@ export default function PerformancePage() {
                       conf_tourney: "Conference Tournament",
                       regular: "Regular Season",
                     };
-                    const icon: Record<string, string> = {
-                      tourney: "🏆",
-                      conf_tourney: "🏅",
-                      regular: "📅",
-                    };
                     return (
                       <div key={gt} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.02] border border-card-border">
-                        <span className="text-sm">{icon[gt] || ""}</span>
                         <div>
                           <div className="text-xs text-muted">{label[gt] || gt}</div>
                           <div className={`text-sm font-semibold ${

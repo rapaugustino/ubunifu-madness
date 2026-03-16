@@ -104,7 +104,7 @@ export default function Home() {
             <p className="text-xl text-muted mb-8 max-w-2xl mx-auto">
               A machine learning system that predicts NCAA basketball outcomes
               — men&apos;s and women&apos;s. A calibrated LR+LightGBM ensemble
-              with 40 features, trained on 163,000+ games across regular season,
+              with 43 features, trained on 165,640 games across regular season,
               conference tournaments, and NCAA tournaments. Game-type context,
               adjusted efficiency, and quality wins drive predictions. Composite
               power rankings blend six metrics. Predictions locked before tipoff,
@@ -180,12 +180,12 @@ export default function Home() {
               <div className="text-xs text-muted mt-0.5">Power rating blend</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-foreground">40</div>
+              <div className="text-3xl font-bold text-foreground">43</div>
               <div className="text-sm font-medium text-foreground mt-1">Model Features</div>
               <div className="text-xs text-muted mt-0.5">LR + LightGBM ensemble</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-foreground">0.137</div>
+              <div className="text-3xl font-bold text-foreground">0.139</div>
               <div className="text-sm font-medium text-foreground mt-1">Val Brier Score</div>
               <div className="text-xs text-muted mt-0.5">2023–2026 holdout</div>
             </div>
@@ -218,7 +218,7 @@ export default function Home() {
             </div>
             <h3 className="font-semibold text-lg mb-2">2. Backtest-Optimized Predictions</h3>
             <p className="text-sm text-muted">
-              A calibrated LR+LightGBM ensemble (40 features, 163K+ games)
+              A calibrated LR+LightGBM ensemble (43 features, 165K+ games)
               trained on all game types with game-context features. Adjusted
               efficiency, quality wins, and Barthag drive predictions. Six
               metrics power composite rankings.

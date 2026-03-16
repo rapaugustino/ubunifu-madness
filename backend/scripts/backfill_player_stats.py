@@ -5,6 +5,9 @@ Iterates through every date from season start (Nov 4, 2025) to today,
 ingesting box scores from ESPN for completed games. Then recomputes
 season averages and importance scores for all players.
 
+When to run: one-time catch-up for player data after a fresh deployment,
+or after the daily cron missed player ingestion for several days.
+
 Run from backend/:
     python -m scripts.backfill_player_stats
     python -m scripts.backfill_player_stats --gender M

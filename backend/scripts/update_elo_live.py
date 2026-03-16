@@ -2,10 +2,16 @@
 Update Elo ratings from ESPN live game results.
 
 Fetches completed games from ESPN, applies Elo updates for any new games,
-and refreshes conference strength metrics.
+and refreshes conference strength metrics. This is the core Elo engine used
+by both the daily cron job and the backfill scripts.
+
+When to run: ad-hoc for manual single-day updates. For automated daily updates,
+use cron_elo_update.py instead. For bulk historical backfills, use
+backfill_espn_games.py or backfill_games.py.
 
 Run from backend/:
     python -m scripts.update_elo_live [--date YYYYMMDD] [--gender M|W]
+    python -m scripts.update_elo_live --yesterday
 """
 
 import argparse

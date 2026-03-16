@@ -62,32 +62,32 @@ python3 -m scripts.compute_stats
 
 **Time:** ~2 minutes
 
-## Step 3: Run the V5 Notebook
+## Step 3: Run the V6 Notebook
 
-Generate and run the V5 notebook:
+Run the V6 notebook directly:
 
 ```bash
 cd notebooks
-python3 generate_v4_notebook.py  # Generates and executes Ubunifu_Madness_V5.ipynb
+jupyter nbconvert --to notebook --execute Ubunifu_Madness_V6.ipynb
 ```
 
 The notebook runs in 7 parts:
 
 1. **Data loading** — Reads all CSVs, merges game results with seeds, box scores, and Massey Ordinals
 2. **Elo computation** — Computes Elo ratings for all teams across all seasons
-3. **Feature engineering** — Builds the 40-feature matrix for ALL game types (regular + conf tourney + NCAA tourney) from 2012+
+3. **Feature engineering** — Builds the 43-feature matrix for ALL game types (regular + conf tourney + NCAA tourney) from 2012+
 4. **Model training** — Season-based CV (train 2012-2022, validate 2023-2026), LR + LightGBM ensemble with isotonic calibration. **Recency-weighted:** exponential decay with 5-season half-life applied to both LR and LGB training.
 5. **Evaluation** — Brier scores, accuracy, calibration curves, feature importance
 6. **Final training** — Train on all 2012-2025 data with recency weights, generate Kaggle submission CSVs
-7. **Artifact export** — Save models to `artifacts/` directory (lr_v5.joblib, lgb_v5.joblib, calibrator_v5.joblib, model_metadata_v5.json)
+7. **Artifact export** — Save models to `artifacts/` directory (lr_v6.joblib, lgb_v6.joblib, calibrator_v6.joblib, model_metadata_v6.json)
 
-**Key differences from V4:**
-- Recency-weighted training: 5-season half-life exponential decay (2025 games weighted ~7x more than 2012)
-- Same 40 features — h2h was tested and rejected due to label leakage
+**Key differences from V5:**
+- 43 features (up from 40)
+- Re-tuned Elo parameters (K=21.8, HOME_ADV=101.9, regression=0.89)
 
 **Output:**
-- `artifacts/lr_v5.joblib`, `lgb_v5.joblib`, `calibrator_v5.joblib` — Model artifacts
-- `artifacts/model_metadata_v5.json` — Feature columns, weights, config
+- `artifacts/lr_v6.joblib`, `lgb_v6.joblib`, `calibrator_v6.joblib` — Model artifacts
+- `artifacts/model_metadata_v6.json` — Feature columns, weights, config
 
 **Time:** ~10-15 minutes
 
@@ -97,8 +97,8 @@ The notebook runs in 7 parts:
 # Submit Stage 2 predictions (after Selection Sunday)
 kaggle competitions submit \
   -c march-machine-learning-mania-2025 \
-  -f submissions/stage2_submission_v5.csv \
-  -m "Stage 2 - V5 LR+LGB ensemble with recency weighting"
+  -f submissions/stage2_submission_v6.csv \
+  -m "Stage 2 - V6 LR+LGB ensemble with recency weighting"
 ```
 
 **Stage 1 vs Stage 2:**
@@ -111,7 +111,7 @@ This enables the live prediction pipeline to use the trained models instead of f
 
 ```bash
 cd backend
-python3 -m scripts.upload_model_artifacts --version v5 --artifact-dir ../notebooks/artifacts/
+python3 -m scripts.upload_model_artifacts --version v6 --artifact-dir ../notebooks/artifacts/
 ```
 
 **What it does:**
@@ -126,7 +126,7 @@ python3 -m scripts.upload_model_artifacts --version v5 --artifact-dir ../noteboo
 
 ```bash
 cd backend
-python3 -m scripts.load_predictions ../submissions/stage2_submission_v5.csv
+python3 -m scripts.load_predictions ../submissions/stage2_submission_v6.csv
 ```
 
 **What it does:**

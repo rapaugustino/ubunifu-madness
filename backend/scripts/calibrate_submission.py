@@ -10,6 +10,9 @@ Three corrections applied in order:
   2. Seed-based prior blending for NCAA tournament matchups
   3. Probability clipping to limit log-loss penalty from extreme values
 
+When to run: right before submitting to Kaggle, after generating a raw
+submission with generate_kaggle_submission.py or the notebook.
+
 Usage:
     cd backend
 

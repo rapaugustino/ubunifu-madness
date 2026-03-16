@@ -2,10 +2,15 @@
 Upload trained model artifacts (joblib files) to the model_artifacts DB table.
 
 This enables the ml_ensemble prediction path in predictor.py, which builds
-features from LIVE DB state instead of using stale CSV predictions.
+features from LIVE DB state instead of using stale CSV predictions. Uploads
+the LR model, LightGBM model, and isotonic calibrator as binary blobs.
+
+When to run: after model retraining (running the V6 notebook), to deploy
+new model weights to the live app. Restart the server afterward to clear
+the cached model bundle.
 
 Run from backend/:
-    python -m scripts.upload_model_artifacts [--version v5] [--artifact-dir ../notebooks/artifacts]
+    python -m scripts.upload_model_artifacts [--version v6] [--artifact-dir ../notebooks/artifacts]
 """
 
 import argparse
@@ -24,7 +29,7 @@ DEFAULT_ARTIFACT_DIR = Path(__file__).resolve().parent.parent.parent / "notebook
 
 def main():
     parser = argparse.ArgumentParser(description="Upload model artifacts to DB")
-    parser.add_argument("--version", default="v5", help="Model version label (default: v5)")
+    parser.add_argument("--version", default="v6", help="Model version label (default: v6)")
     parser.add_argument("--artifact-dir", type=Path, default=DEFAULT_ARTIFACT_DIR,
                         help="Directory containing joblib files and metadata JSON")
     args = parser.parse_args()

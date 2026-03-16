@@ -243,7 +243,7 @@ ubunifu-madness/
 │   │   │   └── performance.py      # Model accuracy tracking
 │   │   └── services/
 │   │       ├── espn.py             # ESPN API client with TTL cache
-│   │       ├── predictor.py        # V5 ML ensemble predictor
+│   │       ├── predictor.py        # V6 ML ensemble predictor
 │   │       ├── advanced_stats.py   # AdjEM, Barthag, power ratings
 │   │       └── player_sync.py      # ESPN to DB player/stat sync
 │   ├── scripts/
@@ -277,7 +277,7 @@ ubunifu-madness/
 │   │   └── components/             # Shared UI components
 │   └── package.json
 ├── notebooks/
-│   └── Ubunifu_Madness_March_ML_Mania.ipynb
+│   └── Ubunifu_Madness_V6.ipynb
 └── data/
     ├── raw/                        # Kaggle CSVs (not in git)
     └── espn_team_map.json          # ESPN to Kaggle ID mapping
@@ -335,13 +335,13 @@ The app is now available at `http://localhost:3000`.
 2. Seed database: `cd backend && python3 -m scripts.seed_db`
 3. Compute stats: `python3 -m scripts.compute_stats`
 4. Map ESPN teams: `python3 -m scripts.map_espn_ids`
-5. Load predictions: `python3 -m scripts.import_predictions ../submissions/stage2_submission_v5.csv`
+5. Load predictions: `python3 -m scripts.import_predictions ../submissions/stage2_submission_v6.csv`
 
 ## Key Features
 
 - **Power Rankings** -- Composite power ratings (AdjEM 35%, Elo 25%, SOS 15%, Barthag 15%, Win% 5%, Momentum 5%) for 700+ teams (men's and women's), updated daily from ESPN results
 - **Live Scores** -- Real-time ESPN scoreboard with Elo enrichment and ML ensemble win probabilities, locked before tipoff with post-game accuracy tracking
-- **V5 ML Ensemble Predictions** -- LR (37.8%) + LightGBM (62.2%) ensemble with 40 features and smooth isotonic calibration. Validation Brier: 0.137, accuracy: 80%
+- **V6 ML Ensemble Predictions** -- LR (37.8%) + LightGBM (62.2%) ensemble with 43 features and smooth isotonic calibration. Validation Brier: 0.139, accuracy: 79.6%
 - **Tournament Bracket** -- Full bracket visualization with model-predicted advancement probabilities via Monte Carlo simulation
 - **Team Comparison** -- Side-by-side statistical breakdown (Four Factors, advanced efficiency, momentum, coaching) with head-to-head win probability and matchup explanation
 - **Madness Agent** -- AI chat assistant (Claude Haiku) with 7 tools: team lookup, matchup predictions, conference analysis, rankings, live scores, upset candidates, bracket builder
@@ -353,13 +353,13 @@ The app is now available at `http://localhost:3000`.
 
 | Metric | Value |
 |--------|-------|
-| Validation Brier Score | **0.137** |
-| Validation Accuracy | **80.0%** |
+| Validation Brier Score | **0.139** |
+| Validation Accuracy | **79.6%** |
 | Ensemble | LR (37.8%) + LightGBM (62.2%) |
-| Features | 40 across 9 categories |
-| Training Data | 163K games (2012-2025, all game types) |
+| Features | 43 across 10 categories |
+| Training Data | 165,640 games (2012-2025, all game types) |
 | Calibration | Smooth isotonic (linear interpolation between step midpoints) |
 | Training Weighting | Recency-weighted (5-season half-life, ~7x newest/oldest) |
-| Live Prediction | V5 ML ensemble with fallback to Elo + record blend |
+| Live Prediction | V6 ML ensemble with fallback to Elo + record blend |
 
 See [docs/MODEL.md](docs/MODEL.md) for the full breakdown.

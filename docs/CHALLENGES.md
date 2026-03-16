@@ -230,6 +230,8 @@ headline = game.get("headline") or ""
 | V5: Recency-weighted training | Modern-era patterns matter more; 5-season half-life | Equal weighting (ignores era shifts) |
 | V5: Home court adjustment in AdjEM | Neutralizes venue advantage for fairer rankings | Unadjusted (inflates home-heavy team stats) |
 | V5: Feature-diff explanations | Grounded in actual model; prevents contradictions | Disconnected 7-signal blend (V3/V4) |
+| V6: Re-tuned Elo (K=21.8, HOME_ADV=101.9, regression=0.89) | Better calibrated Elo via fresh Optuna tuning on 2012+ data | V5 params (K=19.6, HOME_ADV=90.9, regression=0.950) |
+| V6: 43-feature ensemble | 3 additional features improve signal | V5 40-feature set |
 | H2h rejected as feature | Label leakage (Val Brier 0.042) | Include as feature (leaks) |
 | 55% tossup threshold | Honest about model uncertainty | 52% (too few tossups) or 60% (too many excluded) |
 | Locked predictions (never retroactive) | Honest performance tracking | Update predictions mid-game (dishonest) |

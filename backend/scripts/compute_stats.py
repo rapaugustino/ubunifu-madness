@@ -6,6 +6,9 @@ Reads directly from raw CSVs for speed. Computes:
 2. Conference strength (all seasons, all genders)
 3. Team season stats for the current season (2026) only — box scores, massey, momentum, coach
 
+When to run: one-time setup after seeding the DB (seed_db.py), or after importing
+new CSV data. For incremental daily updates, use cron_elo_update.py instead.
+
 Run from backend/:
     python -m scripts.compute_stats [--all-seasons]
 """
