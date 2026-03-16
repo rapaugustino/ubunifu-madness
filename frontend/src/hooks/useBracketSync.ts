@@ -36,14 +36,26 @@ export function useBracketSync(
   const picksRef = useRef(picks);
   picksRef.current = picks;
 
-  // Restore email/userId from localStorage on mount
+  // Restore email/userId from localStorage on mount, and auto-load picks from server
   useEffect(() => {
     const email = localStorage.getItem("bracket_user_email");
     const userId = localStorage.getItem("bracket_user_id");
     if (email && userId) {
       setState((s) => ({ ...s, email, userId: Number(userId) }));
+      // Auto-load saved picks from server
+      fetch(
+        `${API_URL}/api/users/brackets?email=${encodeURIComponent(email)}&season=${season}&gender=${gender}`
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.found && data.picks && Object.keys(data.picks).length > 0) {
+            onLoadPicks(data.picks);
+          }
+        })
+        .catch(() => {});
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season, gender]);
 
   // Auto-save picks when they change (debounced), only if user is identified
   useEffect(() => {
