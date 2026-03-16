@@ -16,6 +16,7 @@ import logging
 
 import joblib
 import numpy as np
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -661,16 +662,19 @@ def predict_matchup(
                 is_ncaa_tourney=is_ncaa_tourney,
                 is_neutral=is_neutral,
             )
-            X = np.array([[features.get(c, 0.0) for c in bundle.feature_cols]])
+            X_values = np.array([[features.get(c, 0.0) for c in bundle.feature_cols]])
+            X_df = pd.DataFrame(X_values, columns=bundle.feature_cols)
 
             probs = []
             weights = []
             if bundle.lr:
-                p = bundle.lr.predict_proba(X)[0][1]
+                # LR was trained without feature names -- pass raw array
+                p = bundle.lr.predict_proba(X_values)[0][1]
                 probs.append(p)
                 weights.append(bundle.weights.get("lr", 0.5))
             if bundle.lgb:
-                p = bundle.lgb.predict_proba(X)[0][1]
+                # LightGBM was trained with feature names -- pass DataFrame
+                p = bundle.lgb.predict_proba(X_df)[0][1]
                 probs.append(p)
                 weights.append(bundle.weights.get("lgb", 0.5))
 

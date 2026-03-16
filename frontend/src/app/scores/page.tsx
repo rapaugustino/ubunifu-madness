@@ -287,8 +287,12 @@ export default function ScoresPage() {
   const isInitial = useRef(true);
 
   const fetchScores = useCallback(async (background = false) => {
-    if (!background) setLoading(true);
-    else setRefreshing(true);
+    if (!background) {
+      setLoading(true);
+      setGames([]);
+    } else {
+      setRefreshing(true);
+    }
     try {
       const dateStr = formatDate(date);
       const res = await fetch(`${API_URL}/api/scores?date=${dateStr}&gender=${gender}`);

@@ -10,7 +10,7 @@ Given two NCAA basketball teams, predict the probability that Team A beats Team 
 
 ## Data Sources
 
-All historical data comes from [Kaggle's March Machine Learning Mania](https://www.kaggle.com/competitions/march-machine-learning-mania-2025) datasets:
+All historical data comes from [Kaggle's March Machine Learning Mania](https://www.kaggle.com/competitions/march-machine-learning-mania-2026) datasets:
 
 | Dataset | Coverage | Purpose |
 |---------|----------|---------|

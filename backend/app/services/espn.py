@@ -430,59 +430,105 @@ def get_tournament_teams(gender: str = "M") -> list[dict]:
     Returns list of {espnId, name, seed, region, logo, abbreviation}.
     """
     sport = SPORTS.get(gender, SPORTS["M"])
-    # ESPN groups=100 is March Madness tournament
-    url = f"{ESPN_BASE}/{sport}/scoreboard?groups=100&limit=200"
-    try:
-        data = _fetch(url, ttl=3600)
-    except Exception:
-        return []
+    # ESPN groups=100 is March Madness tournament.
+    # Fetch multiple date ranges since ESPN populates games gradually
+    # across First Four (3/18-19), R1 (3/20-21), R2 (3/22-23), etc.
+    tournament_dates = [
+        "20260318", "20260319", "20260320", "20260321",
+        "20260322", "20260323",  # Round of 32
+        "20260327", "20260328",  # Sweet 16
+        "20260329", "20260330",  # Elite Eight
+        "20260404", "20260406",  # Final Four + Championship
+    ]
 
-    # Map ESPN region names to our single-letter codes
-    region_map = {
-        "east": "W",      # Kaggle W = East
-        "west": "X",      # Kaggle X = West
-        "south": "Y",     # Kaggle Y = South
-        "midwest": "Z",   # Kaggle Z = Midwest
-    }
+    # Map ESPN region names to our single-letter codes.
+    # Men's use named regions (East, West, South, Midwest).
+    # Women's use numbered regionals (Regional 1-4).
+    # Order matters: check "midwest" before "west" to avoid substring match.
+    region_checks = [
+        ("midwest", "Z"),
+        ("southeast", "Y"),
+        ("south", "Y"),
+        ("east", "W"),
+        ("west", "X"),
+        # Women's numbered regionals -- map to W/X/Y/Z in order
+        ("regional 1", "W"),
+        ("regional 2", "X"),
+        ("regional 3", "Y"),
+        ("regional 4", "Z"),
+    ]
+
+    # For women's, also try to extract region from "Regional N" pattern
+    import re
+    def _parse_region(text):
+        """Parse region code from headline text."""
+        text_lower = text.lower()
+        # Check numbered regionals first (women's)
+        m = re.search(r"regional\s+(\d)", text_lower)
+        if m:
+            num = int(m.group(1))
+            return {1: "W", 2: "X", 3: "Y", 4: "Z"}.get(num)
+        # Named regions (men's)
+        for name, code in region_checks:
+            if name in text_lower:
+                return code
+        return None
 
     teams = {}
-    for event in data.get("events", []):
-        # Parse region from event name (e.g. "South Region - 1st Round")
-        event_name = event.get("name", "")
-        headline = ""
-        for note in event.get("competitions", [{}])[0].get("notes", []):
-            headline = note.get("headline", "")
-            break
-        # Region is in the headline or event status type detail
-        region_code = None
-        for text in [headline, event_name]:
-            text_lower = text.lower()
-            for region_name, code in region_map.items():
-                if region_name in text_lower:
-                    region_code = code
-                    break
-            if region_code:
+
+    # Process dated URLs first (have correct regional info), then undated
+    # as fallback. Dated URLs are authoritative for region assignment.
+    base_url = f"{ESPN_BASE}/{sport}/scoreboard?groups=100&limit=200"
+    urls = [f"{base_url}&dates={d}" for d in tournament_dates] + [base_url]
+
+    for url in urls:
+        try:
+            data = _fetch(url, ttl=300)
+        except Exception:
+            continue
+
+        for event in data.get("events", []):
+            # Parse region from event name (e.g. "South Region - 1st Round")
+            event_name = event.get("name", "")
+            headline = ""
+            for note in event.get("competitions", [{}])[0].get("notes", []):
+                headline = note.get("headline", "")
                 break
+            # Region is in the headline or event status type detail
+            region_code = None
+            for text in [headline, event_name]:
+                if text:
+                    region_code = _parse_region(text)
+                    if region_code:
+                        break
 
-        comp = event.get("competitions", [{}])[0]
-        for c in comp.get("competitors", []):
-            t = c.get("team", {})
-            espn_id = int(t["id"])
-            if espn_id in teams:
-                continue
+            comp = event.get("competitions", [{}])[0]
+            for c in comp.get("competitors", []):
+                t = c.get("team", {})
+                tid = t.get("id")
+                if not tid or int(tid) < 0:
+                    continue  # Skip TBD placeholders
+                espn_id = int(tid)
+                if espn_id in teams:
+                    # Update region if we now have a better one
+                    if region_code and not teams[espn_id].get("region"):
+                        teams[espn_id]["region"] = region_code
+                    continue
 
-            # Seed from curatedRank.current or direct seed field
-            seed = c.get("curatedRank", {}).get("current") or c.get("seed")
+                # Seed from curatedRank.current or direct seed field
+                seed = c.get("curatedRank", {}).get("current") or c.get("seed")
+                if seed == 99:
+                    continue  # ESPN placeholder rank
 
-            logos = t.get("logos", [])
-            logo = t.get("logo") or (logos[0]["href"] if logos else None)
-            teams[espn_id] = {
-                "espnId": espn_id,
-                "name": t.get("displayName", ""),
-                "abbreviation": t.get("abbreviation", ""),
-                "logo": logo,
-                "seed": seed,
-                "region": region_code,
-            }
+                logos = t.get("logos", [])
+                logo = t.get("logo") or (logos[0]["href"] if logos else None)
+                teams[espn_id] = {
+                    "espnId": espn_id,
+                    "name": t.get("displayName", ""),
+                    "abbreviation": t.get("abbreviation", ""),
+                    "logo": logo,
+                    "seed": seed,
+                    "region": region_code,
+                }
 
     return list(teams.values())

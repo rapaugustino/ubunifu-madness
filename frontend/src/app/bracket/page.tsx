@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useGender } from "@/hooks/useGender";
 import { useBracketSync } from "@/hooks/useBracketSync";
 import { Sparkles, RefreshCw, Download, Trophy, X, Save, Check, CloudDownload } from "lucide-react";
@@ -136,7 +136,7 @@ function MatchupCard({
   onPick: (slotId: string, teamId: number) => void;
   onAnalyze: (matchup: Matchup) => void;
 }) {
-  if (!matchup || !matchup.teamA || !matchup.teamB) {
+  if (!matchup || (!matchup.teamA && !matchup.teamB)) {
     return (
       <div className="p-2 rounded-lg bg-card/50 border border-card-border border-dashed min-h-[76px] flex items-center justify-center">
         <span className="text-xs text-muted">TBD</span>
@@ -147,8 +147,8 @@ function MatchupCard({
   const { teamA, teamB, result, winProbA } = matchup;
   const userPick = picks[slotId];
   const hasResult = result != null;
-  const aIsWinner = hasResult && result.winnerId === teamA.id;
-  const bIsWinner = hasResult && result.winnerId === teamB.id;
+  const aIsWinner = hasResult && teamA != null && result.winnerId === teamA.id;
+  const bIsWinner = hasResult && teamB != null && result.winnerId === teamB.id;
   const canPick = !isHistorical;
 
   return (
@@ -156,17 +156,17 @@ function MatchupCard({
       <TeamSlot
         team={teamA}
         isWinner={aIsWinner}
-        isPicked={userPick === teamA.id}
-        canPick={canPick}
-        onClick={() => onPick(slotId, teamA.id)}
+        isPicked={teamA != null && userPick === teamA.id}
+        canPick={canPick && teamA != null && teamA.id != null}
+        onClick={teamA?.id ? () => onPick(slotId, teamA.id) : undefined}
         score={hasResult ? (aIsWinner ? result.winnerScore : result.loserScore) : null}
       />
       <TeamSlot
         team={teamB}
         isWinner={bIsWinner}
-        isPicked={userPick === teamB.id}
-        canPick={canPick}
-        onClick={() => onPick(slotId, teamB.id)}
+        isPicked={teamB != null && userPick === teamB.id}
+        canPick={canPick && teamB != null && teamB.id != null}
+        onClick={teamB?.id ? () => onPick(slotId, teamB.id) : undefined}
         score={hasResult ? (bIsWinner ? result.winnerScore : result.loserScore) : null}
       />
       {/* Win prob indicator */}
@@ -473,6 +473,10 @@ export default function BracketPage() {
 
   const fetchBracket = useCallback(async () => {
     setLoading(true);
+    setBracket(null);
+    setPicks({});
+    setLiveProbCache({});
+    setSimResults(null);
     try {
       const res = await fetch(`${API_URL}/api/bracket/full?gender=${gender}&season=0`);
       const data: BracketData = await res.json();
@@ -498,9 +502,257 @@ export default function BracketPage() {
     fetchBracket();
   }, [fetchBracket]);
 
+  // Build a team lookup from all bracket data for dynamic matchup building
+  const teamLookup = useMemo(() => {
+    if (!bracket) return {} as Record<number, BracketTeam>;
+    const lookup: Record<number, BracketTeam> = {};
+    for (const region of Object.values(bracket.regions)) {
+      for (const round of region.rounds) {
+        for (const m of round) {
+          if (m?.teamA?.id) lookup[m.teamA.id] = m.teamA;
+          if (m?.teamB?.id) lookup[m.teamB.id] = m.teamB;
+        }
+      }
+    }
+    for (const m of bracket.firstFour) {
+      if (m?.teamA?.id) lookup[m.teamA.id] = m.teamA;
+      if (m?.teamB?.id) lookup[m.teamB.id] = m.teamB;
+    }
+    for (const m of bracket.finalFour) {
+      if (m?.teamA?.id) lookup[m.teamA.id] = m.teamA;
+      if (m?.teamB?.id) lookup[m.teamB.id] = m.teamB;
+    }
+    return lookup;
+  }, [bracket]);
+
+  // Build dynamic matchups for later rounds based on user picks.
+  // When both feeder slots have picks, create a matchup for the next round.
+  // Cache of fetched live predictions: "teamAId_teamBId" -> winProbA
+  const [liveProbCache, setLiveProbCache] = useState<Record<string, number>>({});
+
+  // Fetch live prediction for a pair of teams
+  const fetchLiveProb = useCallback((teamAId: number, teamBId: number) => {
+    const key = `${Math.min(teamAId, teamBId)}_${Math.max(teamAId, teamBId)}`;
+    if (liveProbCache[key] !== undefined) return;
+    // Mark as pending to avoid duplicate fetches
+    setLiveProbCache((prev) => ({ ...prev, [key]: -1 }));
+    fetch(`${API_URL}/api/predictions/${Math.min(teamAId, teamBId)}/${Math.max(teamAId, teamBId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.win_prob_a !== undefined) {
+          setLiveProbCache((prev) => ({ ...prev, [key]: data.win_prob_a }));
+        }
+      })
+      .catch(() => {});
+  }, [liveProbCache]);
+
+  const getLiveProb = (teamAId: number | null, teamBId: number | null): number => {
+    if (!teamAId || !teamBId) return 0.5;
+    const key = `${Math.min(teamAId, teamBId)}_${Math.max(teamAId, teamBId)}`;
+    const cached = liveProbCache[key];
+    if (cached !== undefined && cached >= 0) {
+      return teamAId === Math.min(teamAId, teamBId) ? cached : 1 - cached;
+    }
+    // Trigger fetch if not cached
+    fetchLiveProb(teamAId, teamBId);
+    // Fallback to Elo while loading
+    const tA = teamLookup[teamAId];
+    const tB = teamLookup[teamBId];
+    if (tA?.elo && tB?.elo) {
+      return 1 / (1 + Math.pow(10, (tB.elo - tA.elo) / 400));
+    }
+    return 0.5;
+  };
+
+  const dynamicMatchups = useMemo(() => {
+    if (!bracket) return {} as Record<string, Matchup>;
+    const activePicks = bracketMode === "my_bracket" ? picks : (officialPicks ?? {});
+    const dynamic: Record<string, Matchup> = {};
+
+    // First: resolve First Four picks into R64 TBD slots.
+    // A First Four pick fills the null-id team in the R64 matchup for that region+seed.
+    // Resolve First Four winners into R64 TBD slots
+    if (bracket.firstFour) {
+      for (let fi = 0; fi < bracket.firstFour.length; fi++) {
+        const ffSlot = `first_four_${fi}`;
+        const ffPick = activePicks[ffSlot];
+        const ffResult = bracket.firstFour[fi]?.result;
+        const winnerId = ffResult ? ffResult.winnerId : ffPick;
+        if (!winnerId) continue;
+
+        const ff = bracket.firstFour[fi];
+        const ffRegion = ff.region; // e.g. "Midwest"
+        const ffSeed = ff.seed;
+
+        // Find the R64 slot in this region that has a TBD team with this seed
+        const region = bracket.regions[ffRegion];
+        if (!region) continue;
+        const r64 = region.rounds[0];
+        for (let mi = 0; mi < r64.length; mi++) {
+          const m = r64[mi];
+          if (!m) continue;
+          const aNeedsFill = m.teamA && m.teamA.id === null && m.teamA.seed === ffSeed;
+          const bNeedsFill = m.teamB && m.teamB.id === null && m.teamB.seed === ffSeed;
+          if (aNeedsFill || bNeedsFill) {
+            const slotId = `${ffRegion}_r0_${mi}`;
+            const winnerTeam = teamLookup[winnerId];
+            if (winnerTeam) {
+              const existingMatchup = m;
+              const resolvedA = aNeedsFill ? winnerTeam : existingMatchup.teamA;
+              const resolvedB = bNeedsFill ? winnerTeam : existingMatchup.teamB;
+              dynamic[slotId] = {
+                teamA: resolvedA,
+                teamB: resolvedB,
+                winProbA: getLiveProb(resolvedA?.id ?? null, resolvedB?.id ?? null),
+                result: existingMatchup.result,
+              };
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    // Within a region: r0_0 + r0_1 -> r1_0, r0_2 + r0_3 -> r1_1, etc.
+    for (const regionName of Object.keys(bracket.regions)) {
+      const region = bracket.regions[regionName];
+      for (let roundIdx = 1; roundIdx < region.rounds.length; roundIdx++) {
+        const prevRound = region.rounds[roundIdx - 1];
+        for (let i = 0; i < prevRound.length; i += 2) {
+          const nextIdx = Math.floor(i / 2);
+          const nextSlot = `${regionName}_r${roundIdx}_${nextIdx}`;
+
+          // If backend already has a real matchup with real teams, skip
+          const existing = region.rounds[roundIdx]?.[nextIdx];
+          if (existing?.teamA?.id && existing?.teamB?.id) continue;
+
+          const slotA = `${regionName}_r${roundIdx - 1}_${i}`;
+          const slotB = `${regionName}_r${roundIdx - 1}_${i + 1}`;
+
+          // Check picks or game results for feeder slots
+          let winnerA = activePicks[slotA];
+          let winnerB = activePicks[slotB];
+
+          // Also check game results from the backend
+          if (!winnerA) {
+            const prevMatchA = region.rounds[roundIdx - 1]?.[i];
+            if (prevMatchA?.result) winnerA = prevMatchA.result.winnerId;
+          }
+          if (!winnerB) {
+            const prevMatchB = region.rounds[roundIdx - 1]?.[i + 1];
+            if (prevMatchB?.result) winnerB = prevMatchB.result.winnerId;
+          }
+
+          // Also check dynamic matchup results
+          const dynA = dynamic[slotA];
+          const dynB = dynamic[slotB];
+          if (!winnerA && dynA?.result) winnerA = dynA.result.winnerId;
+          if (!winnerB && dynB?.result) winnerB = dynB.result.winnerId;
+
+          const teamA = winnerA ? teamLookup[winnerA] : null;
+          const teamB = winnerB ? teamLookup[winnerB] : null;
+
+          if (teamA || teamB) {
+            dynamic[nextSlot] = {
+              teamA: teamA ?? null,
+              teamB: teamB ?? null,
+              winProbA: getLiveProb(teamA?.id ?? null, teamB?.id ?? null),
+              result: null,
+            };
+          }
+        }
+      }
+    }
+
+    // Final Four: region winners feed into ff_0, ff_1
+    const regionNames = Object.keys(bracket.regions);
+    const regionWinnerSlots = regionNames.map((rn) => {
+      const region = bracket.regions[rn];
+      const lastRound = region.rounds.length - 1;
+      return `${rn}_r${lastRound}_0`;
+    });
+
+    // ff_0 = region 0 winner vs region 1 winner
+    // ff_1 = region 2 winner vs region 3 winner
+    for (let ffIdx = 0; ffIdx < 2; ffIdx++) {
+      const slotA = regionWinnerSlots[ffIdx * 2];
+      const slotB = regionWinnerSlots[ffIdx * 2 + 1];
+      if (!slotA || !slotB) continue;
+
+      let winnerA = activePicks[slotA];
+      let winnerB = activePicks[slotB];
+      if (!winnerA && dynamic[slotA]?.result) winnerA = dynamic[slotA].result!.winnerId;
+      if (!winnerB && dynamic[slotB]?.result) winnerB = dynamic[slotB].result!.winnerId;
+
+      // Also check backend region winners
+      if (!winnerA) {
+        const rw = bracket.regions[regionNames[ffIdx * 2]]?.winner;
+        if (rw?.id) winnerA = rw.id;
+      }
+      if (!winnerB) {
+        const rw = bracket.regions[regionNames[ffIdx * 2 + 1]]?.winner;
+        if (rw?.id) winnerB = rw.id;
+      }
+
+      const teamA = winnerA ? teamLookup[winnerA] : null;
+      const teamB = winnerB ? teamLookup[winnerB] : null;
+      if (teamA || teamB) {
+        dynamic[`ff_${ffIdx}`] = {
+          teamA: teamA ?? null,
+          teamB: teamB ?? null,
+          winProbA: 0.5,
+          result: null,
+        };
+      }
+    }
+
+    // Championship: ff_0 winner vs ff_1 winner
+    const ffWinnerA = activePicks["ff_0"];
+    const ffWinnerB = activePicks["ff_1"];
+    const champA = ffWinnerA ? teamLookup[ffWinnerA] : null;
+    const champB = ffWinnerB ? teamLookup[ffWinnerB] : null;
+    if (champA || champB) {
+      dynamic["champ_0"] = {
+        teamA: champA ?? null,
+        teamB: champB ?? null,
+        winProbA: 0.5,
+        result: null,
+      };
+    }
+
+    return dynamic;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bracket, picks, officialPicks, bracketMode, teamLookup, liveProbCache]);
+
+  // Get the effective matchup for a slot (backend data or dynamic)
+  const getMatchup = useCallback(
+    (backendMatchup: Matchup | null, slotId: string): Matchup | null => {
+      // If backend has a full matchup with both teams, use it
+      if (backendMatchup?.teamA?.id && backendMatchup?.teamB?.id) return backendMatchup;
+      // Otherwise check dynamic
+      return dynamicMatchups[slotId] ?? backendMatchup;
+    },
+    [dynamicMatchups]
+  );
+
   const handlePick = (slotId: string, teamId: number) => {
     if (!bracket) return;
+    // When changing a pick, cascade-clear downstream picks that depended on the old pick
     const newPicks = { ...picks, [slotId]: teamId };
+    const oldPick = picks[slotId];
+    if (oldPick && oldPick !== teamId) {
+      // Clear all downstream slots that had the old team picked
+      const clearDownstream = (oldTeamId: number) => {
+        for (const [key, val] of Object.entries(newPicks)) {
+          if (key !== slotId && val === oldTeamId) {
+            delete newPicks[key];
+            // Recursively clear further downstream
+            clearDownstream(oldTeamId);
+          }
+        }
+      };
+      clearDownstream(oldPick);
+    }
     setPicks(newPicks);
     localStorage.setItem(picksKey(bracket.season, gender), JSON.stringify(newPicks));
   };
@@ -804,18 +1056,11 @@ export default function BracketPage() {
       {/* Official bracket status banner */}
       {isOfficialMode && !officialLoading && !officialPicks && !isHistorical && (
         <div className="mb-6 p-4 rounded-xl bg-card border border-card-border text-center">
-          <p className="text-sm text-muted mb-3">
+          <p className="text-sm text-muted">
             {bracketMode === "consensus"
-              ? "Consensus bracket requires both Model and Agent brackets to be generated first."
-              : `${BRACKET_MODES.find((m) => m.key === bracketMode)?.label} bracket has not been generated yet.`}
+              ? "Consensus bracket will be available after Model and Agent brackets are generated."
+              : `${BRACKET_MODES.find((m) => m.key === bracketMode)?.label} bracket has not been generated yet. Check back soon.`}
           </p>
-          <button
-            onClick={generateOfficial}
-            disabled={generating}
-            className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
-          >
-            {generating ? "Generating..." : `Generate ${BRACKET_MODES.find((m) => m.key === bracketMode)?.label} Bracket`}
-          </button>
         </div>
       )}
 
@@ -959,7 +1204,7 @@ export default function BracketPage() {
                 </div>
                 <MatchupCard
                   matchup={matchup}
-                  isHistorical={true}
+                  isHistorical={isHistorical || isReadOnly || matchup.result != null}
                   picks={displayPicks}
                   slotId={`first_four_${i}`}
                   onPick={handlePick}
@@ -977,17 +1222,20 @@ export default function BracketPage() {
               Final Four
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-              {bracket.finalFour.map((matchup, i) => (
-                <MatchupCard
-                  key={`ff_${i}`}
-                  matchup={matchup}
-                  isHistorical={isHistorical || isReadOnly}
-                  picks={displayPicks}
-                  slotId={`ff_${i}`}
-                  onPick={handlePick}
-                  onAnalyze={setAnalysisMatchup}
-                />
-              ))}
+              {bracket.finalFour.map((matchup, i) => {
+                const slotId = `ff_${i}`;
+                return (
+                  <MatchupCard
+                    key={slotId}
+                    matchup={getMatchup(matchup, slotId)}
+                    isHistorical={isHistorical || isReadOnly}
+                    picks={displayPicks}
+                    slotId={slotId}
+                    onPick={handlePick}
+                    onAnalyze={setAnalysisMatchup}
+                  />
+                );
+              })}
             </div>
           </div>
 
@@ -998,17 +1246,20 @@ export default function BracketPage() {
                 Championship
               </h3>
               <div className="max-w-sm">
-                {bracket.championship.map((matchup, i) => (
-                  <MatchupCard
-                    key={`champ_${i}`}
-                    matchup={matchup}
-                    isHistorical={isHistorical}
-                    picks={picks}
-                    slotId={`champ_${i}`}
-                    onPick={handlePick}
-                    onAnalyze={setAnalysisMatchup}
-                  />
-                ))}
+                {bracket.championship.map((matchup, i) => {
+                  const slotId = `champ_${i}`;
+                  return (
+                    <MatchupCard
+                      key={slotId}
+                      matchup={getMatchup(matchup, slotId)}
+                      isHistorical={isHistorical}
+                      picks={displayPicks}
+                      slotId={slotId}
+                      onPick={handlePick}
+                      onAnalyze={setAnalysisMatchup}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1021,17 +1272,21 @@ export default function BracketPage() {
                 {bracket.roundNames[roundIdx] || `Round ${roundIdx + 1}`}
               </h3>
               <div className="space-y-2">
-                {round.map((matchup, i) => (
-                  <MatchupCard
-                    key={`${activeRegion}_r${roundIdx}_${i}`}
-                    matchup={matchup}
-                    isHistorical={isHistorical}
-                    picks={picks}
-                    slotId={`${activeRegion}_r${roundIdx}_${i}`}
-                    onPick={handlePick}
-                    onAnalyze={setAnalysisMatchup}
-                  />
-                ))}
+                {round.map((matchup, i) => {
+                  const slotId = `${activeRegion}_r${roundIdx}_${i}`;
+                  const effectiveMatchup = getMatchup(matchup, slotId);
+                  return (
+                    <MatchupCard
+                      key={slotId}
+                      matchup={effectiveMatchup}
+                      isHistorical={isHistorical}
+                      picks={displayPicks}
+                      slotId={slotId}
+                      onPick={handlePick}
+                      onAnalyze={setAnalysisMatchup}
+                    />
+                  );
+                })}
               </div>
             </div>
           ))}

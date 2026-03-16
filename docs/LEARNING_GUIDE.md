@@ -28,7 +28,7 @@ A comprehensive guide to understanding, explaining, and extending the Ubunifu Ma
 
 ## 1. What Is This Project?
 
-Ubunifu Madness is an AI-powered NCAA basketball prediction platform built for the [Kaggle March Machine Learning Mania 2025](https://www.kaggle.com/competitions/march-machine-learning-mania-2025) competition. It predicts the probability that any team beats any other team in both men's and women's NCAA basketball.
+Ubunifu Madness is an AI-powered NCAA basketball prediction platform built for the [Kaggle March Machine Learning Mania 2026](https://www.kaggle.com/competitions/march-machine-learning-mania-2026) competition. It predicts the probability that any team beats any other team in both men's and women's NCAA basketball.
 
 **What makes it different from a Kaggle notebook:**
 - It's a full-stack deployed application, not just a .ipynb
@@ -587,14 +587,14 @@ Our composite power rating blends multiple metrics:
 
 | Component | Weight | Why |
 |-----------|--------|-----|
-| AdjEM | 50% | Best single predictor of game outcomes |
-| Barthag | 25% | Non-linear version of efficiency — rewards elite teams |
-| SOS | 10% | Schedule difficulty matters — contextualizes record |
-| Elo | 5% | Captures long-term trajectory and game-by-game results |
+| AdjEM | 35% | Best single predictor of game outcomes |
+| Elo | 25% | Captures long-term trajectory and game-by-game results |
+| SOS | 15% | Schedule difficulty matters — contextualizes record |
+| Barthag | 15% | Non-linear version of efficiency — rewards elite teams |
 | Win % | 5% | Simple but meaningful — wins matter |
 | Momentum | 5% | Recent form (last-10 games) |
 
-**75% efficiency-based** — this aligns with KenPom-style philosophy that efficiency metrics are the most predictive team quality indicators.
+**50% efficiency-based** (AdjEM + Barthag), **25% Elo**, **15% SOS** — this balances predictive efficiency metrics with Elo's game-by-game trajectory and schedule strength context.
 
 ### Upset Vulnerability Index
 

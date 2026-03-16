@@ -10,6 +10,7 @@ from app.models import (
     TeamConference, TeamSeasonStats, GameResult, Conference,
 )
 from app.models.official_bracket import OfficialBracket
+from app.services.predictor import predict_matchup
 
 router = APIRouter(tags=["bracket"])
 
@@ -164,27 +165,19 @@ def full_bracket(
     stats_season = latest_stats_season[0] if latest_stats_season else actual_season
     elo_map, seed_map, conf_map, stats_map = _batch_load_maps(db, actual_season, all_team_ids, stats_season=stats_season)
 
-    # Build prediction cache
-    preds = (
-        db.query(Prediction)
-        .filter(
-            Prediction.season == actual_season,
-            Prediction.team_a_id.in_(all_team_ids),
-            Prediction.team_b_id.in_(all_team_ids),
-        )
-        .all()
-    )
-    pred_cache = {(p.team_a_id, p.team_b_id): p.win_prob_a for p in preds}
-
-    # If no predictions for this season, try using Elo-based probabilities
-    use_elo_fallback = len(pred_cache) == 0
+    # Use live V5 predictor for win probabilities, with cache
+    _wp_cache: dict[tuple[int, int], float] = {}
 
     def get_win_prob(t1_id, t2_id):
-        if use_elo_fallback:
-            elo_a = elo_map.get(t1_id, 1500)
-            elo_b = elo_map.get(t2_id, 1500)
-            return round(1 / (1 + 10 ** ((elo_b - elo_a) / 400)), 4)
-        return round(_get_pred_from_cache(pred_cache, t1_id, t2_id), 4)
+        key = (min(t1_id, t2_id), max(t1_id, t2_id))
+        if key not in _wp_cache:
+            prob_a, _ = predict_matchup(
+                db, key[0], key[1],
+                is_ncaa_tourney=True, is_neutral=True,
+            )
+            _wp_cache[key] = prob_a
+        prob = _wp_cache[key]
+        return round(prob if t1_id == key[0] else (1 - prob), 4)
 
     # Load tournament game results
     tourney_games = (
@@ -215,13 +208,22 @@ def full_bracket(
             return None
         return _team_dict(team, elo_map, seed_map, conf_map, stats_map)
 
-    def make_matchup(team_a_id, team_b_id):
+    def _tbd_team(seed=None, region_code=None):
+        label = "TBD"
+        if seed and region_code and (region_code, seed) in first_four_pending:
+            label = first_four_pending[(region_code, seed)]
+        return {"id": None, "name": label, "seed": seed, "elo": None,
+                "record": None, "conference": None, "logo": None, "color": None, "winPct": None, "gender": gender}
+
+    def make_matchup(team_a_id, team_b_id, tbd_seed=None, region_code=None):
+        team_a = make_team_dict(team_a_id) if team_a_id else _tbd_team(tbd_seed, region_code)
+        team_b = make_team_dict(team_b_id) if team_b_id else _tbd_team(tbd_seed, region_code)
         if team_a_id is None or team_b_id is None:
-            return None
+            return {"teamA": team_a, "teamB": team_b, "winProbA": 0.5, "result": None}
         result = _build_result(result_lookup, team_a_id, team_b_id)
         return {
-            "teamA": make_team_dict(team_a_id),
-            "teamB": make_team_dict(team_b_id),
+            "teamA": team_a,
+            "teamB": team_b,
             "winProbA": get_win_prob(team_a_id, team_b_id),
             "result": result,
         }
@@ -236,10 +238,12 @@ def full_bracket(
             by_region[region][seed_row.seed_number] = []
         by_region[region][seed_row.seed_number].append(team.id)
 
-    # Build First Four matchups and resolve play-in games
+    # Build First Four matchups and resolve play-in games.
+    # Track which First Four matchup feeds each TBD slot.
     first_four = []
+    first_four_pending = {}  # (region, seed) -> "TeamA / TeamB"
     for region in by_region:
-        for seed_num, team_ids in by_region[region].items():
+        for seed_num, team_ids in list(by_region[region].items()):
             if len(team_ids) == 2:
                 t1, t2 = team_ids[0], team_ids[1]
                 matchup = make_matchup(t1, t2)
@@ -252,7 +256,11 @@ def full_bracket(
                     winner_id = result_lookup[key].w_team_id
                     by_region[region][seed_num] = [winner_id]
                 else:
-                    by_region[region][seed_num] = [team_ids[0]]
+                    # First Four not yet played: mark as None (TBD)
+                    t1_name = team_by_id[t1].name if t1 in team_by_id else "TBD"
+                    t2_name = team_by_id[t2].name if t2 in team_by_id else "TBD"
+                    first_four_pending[(region, seed_num)] = f"{t1_name} / {t2_name}"
+                    by_region[region][seed_num] = [None]
 
     # Build bracket region by region
     regions = {}
@@ -270,17 +278,24 @@ def full_bracket(
         for seed_a, seed_b in ROUND1_MATCHUPS:
             tid_a = teams_by_seed.get(seed_a)
             tid_b = teams_by_seed.get(seed_b)
-            if tid_a and tid_b:
+            # Both teams known: normal matchup
+            # One team is None (First Four pending): show matchup with TBD slot
+            if tid_a is not None and tid_b is not None:
                 matchup = make_matchup(tid_a, tid_b)
                 r1.append(matchup)
-                # Determine winner for next round
                 if matchup and matchup["result"]:
                     r1_winners.append(matchup["result"]["winnerId"])
                 else:
                     r1_winners.append(None)
+            elif seed_a in teams_by_seed or seed_b in teams_by_seed:
+                # One side is TBD from unresolved First Four
+                tbd_seed = seed_a if tid_a is None else seed_b
+                matchup = make_matchup(tid_a, tid_b, tbd_seed=tbd_seed, region_code=region_code)
+                r1.append(matchup)
+                r1_winners.append(None)
             else:
                 r1.append(None)
-                r1_winners.append(tid_a or tid_b)  # Bye
+                r1_winners.append(None)
 
         rounds.append(r1)
 
@@ -441,36 +456,20 @@ def simulate_bracket(
         raise HTTPException(404, "No seeds found for this season/gender")
 
     all_team_ids = [team.id for _, team in seeds]
-    elo_map = {
-        r.team_id: r.elo
-        for r in db.query(EloRating)
-        .filter(EloRating.season == season, EloRating.team_id.in_(all_team_ids))
-        .all()
-    }
 
-    # Build prediction cache
-    preds = (
-        db.query(Prediction)
-        .filter(
-            Prediction.season == season,
-            Prediction.team_a_id.in_(all_team_ids),
-            Prediction.team_b_id.in_(all_team_ids),
-        )
-        .all()
-    )
-    pred_cache = {}
-    for p in preds:
-        pred_cache[(p.team_a_id, p.team_b_id)] = p.win_prob_a
-
-    use_elo = len(pred_cache) == 0
+    # Use live V5 predictor with cache for simulation
+    _sim_cache: dict[tuple[int, int], float] = {}
 
     def get_prob(t1, t2):
-        if use_elo:
-            e1 = elo_map.get(t1, 1500)
-            e2 = elo_map.get(t2, 1500)
-            return 1 / (1 + 10 ** ((e2 - e1) / 400))
-        lo, hi = min(t1, t2), max(t1, t2)
-        return pred_cache.get((lo, hi), 0.5)
+        key = (min(t1, t2), max(t1, t2))
+        if key not in _sim_cache:
+            prob_a, _ = predict_matchup(
+                db, key[0], key[1],
+                is_ncaa_tourney=True, is_neutral=True,
+            )
+            _sim_cache[key] = prob_a
+        prob = _sim_cache[key]
+        return prob if t1 == key[0] else (1 - prob)
 
     # Group by region
     by_region = {}
@@ -638,35 +637,20 @@ def generate_official_bracket(
 
     all_team_ids = list({team.id for _, team in seeds})
 
-    # Load predictions and Elo
-    preds = (
-        db.query(Prediction)
-        .filter(
-            Prediction.season == actual_season,
-            Prediction.team_a_id.in_(all_team_ids),
-            Prediction.team_b_id.in_(all_team_ids),
-        )
-        .all()
-    )
-    pred_cache = {(p.team_a_id, p.team_b_id): p.win_prob_a for p in preds}
-    elo_map = {
-        r.team_id: r.elo
-        for r in db.query(EloRating)
-        .filter(EloRating.season == actual_season, EloRating.team_id.in_(all_team_ids))
-        .all()
-    }
-    use_elo = len(pred_cache) == 0
+    # Use the live V5 ML ensemble predictor for each matchup.
+    # Cache results to avoid recomputing the same pair.
+    _prob_cache: dict[tuple[int, int], float] = {}
 
     def get_prob(t1, t2):
-        if use_elo:
-            e1 = elo_map.get(t1, 1500)
-            e2 = elo_map.get(t2, 1500)
-            return 1 / (1 + 10 ** ((e2 - e1) / 400))
-        lo, hi = min(t1, t2), max(t1, t2)
-        prob = pred_cache.get((lo, hi))
-        if prob is not None:
-            return prob if t1 == lo else (1 - prob)
-        return 0.5
+        key = (min(t1, t2), max(t1, t2))
+        if key not in _prob_cache:
+            prob_a, _ = predict_matchup(
+                db, key[0], key[1],
+                is_ncaa_tourney=True, is_neutral=True,
+            )
+            _prob_cache[key] = prob_a
+        prob = _prob_cache[key]
+        return prob if t1 == key[0] else (1 - prob)
 
     # Group by region, resolve play-ins
     by_region = {}

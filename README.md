@@ -130,7 +130,7 @@ erDiagram
         string gender
         float prob_away
         float prob_home
-        string source "blended/live_blend"
+        string source "ml_ensemble"
         datetime locked_at
         boolean resolved
         boolean correct
@@ -219,7 +219,7 @@ ubunifu-madness/
 │   │   ├── main.py                 # FastAPI app entry point
 │   │   ├── config.py               # Environment settings
 │   │   ├── database.py             # SQLAlchemy engine & session
-│   │   ├── models/                 # 11 ORM models
+│   │   ├── models/                 # 15 ORM models
 │   │   │   ├── team.py             # Team with ESPN mapping
 │   │   │   ├── elo_rating.py       # Elo snapshots per season/day
 │   │   │   ├── game_result.py      # Historical + live game results
@@ -344,7 +344,7 @@ The app is now available at `http://localhost:3000`.
 - **V5 ML Ensemble Predictions** -- LR (37.8%) + LightGBM (62.2%) ensemble with 40 features and smooth isotonic calibration. Validation Brier: 0.137, accuracy: 80%
 - **Tournament Bracket** -- Full bracket visualization with model-predicted advancement probabilities via Monte Carlo simulation
 - **Team Comparison** -- Side-by-side statistical breakdown (Four Factors, advanced efficiency, momentum, coaching) with head-to-head win probability and matchup explanation
-- **Madness Agent** -- AI chat assistant (Claude Haiku) with 6 tools: team lookup, matchup predictions, conference analysis, rankings, live scores, upset candidates
+- **Madness Agent** -- AI chat assistant (Claude Haiku) with 7 tools: team lookup, matchup predictions, conference analysis, rankings, live scores, upset candidates, bracket builder
 - **Performance Tracking** -- Cumulative accuracy charts, daily breakdowns, calibration curves, and paginated game log. Predictions locked before tipoff, never changed retroactively
 - **Tossup Handling** -- Games with <55% model confidence labeled as TOSSUP, excluded from accuracy metrics
 - **Automated Daily Pipeline** -- Cron job updates Elo, game results, records, player stats, SOS, advanced stats (AdjEM, Barthag), power ratings, and locks predictions
