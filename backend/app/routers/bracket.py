@@ -171,19 +171,28 @@ def full_bracket(
     stats_season = latest_stats_season[0] if latest_stats_season else actual_season
     elo_map, seed_map, conf_map, stats_map = _batch_load_maps(db, actual_season, all_team_ids, stats_season=stats_season)
 
-    # Use live V5 predictor for win probabilities, with cache
-    _wp_cache: dict[tuple[int, int], float] = {}
+    # Use static Prediction table for fast bracket display.
+    # Live predictor is only used for official bracket generation (one-time).
+    preds = (
+        db.query(Prediction)
+        .filter(
+            Prediction.season == actual_season,
+            Prediction.team_a_id.in_(all_team_ids),
+            Prediction.team_b_id.in_(all_team_ids),
+        )
+        .all()
+    )
+    pred_cache = {(p.team_a_id, p.team_b_id): p.win_prob_a for p in preds}
 
     def get_win_prob(t1_id, t2_id):
-        key = (min(t1_id, t2_id), max(t1_id, t2_id))
-        if key not in _wp_cache:
-            prob_a, _ = predict_matchup(
-                db, key[0], key[1],
-                is_ncaa_tourney=True, is_neutral=True,
-            )
-            _wp_cache[key] = prob_a
-        prob = _wp_cache[key]
-        return round(prob if t1_id == key[0] else (1 - prob), 4)
+        lo, hi = min(t1_id, t2_id), max(t1_id, t2_id)
+        prob = pred_cache.get((lo, hi))
+        if prob is not None:
+            return round(prob if t1_id == lo else (1 - prob), 4)
+        # Elo fallback for matchups not in the prediction table
+        elo_a = elo_map.get(t1_id, 1500)
+        elo_b = elo_map.get(t2_id, 1500)
+        return round(1 / (1 + 10 ** ((elo_b - elo_a) / 400)), 4)
 
     # Load tournament game results
     tourney_games = (

@@ -113,9 +113,12 @@ function TeamSlot({
         </span>
       </div>
       {score != null && (
-        <span className={`text-xs font-mono shrink-0 ${isWinner ? "font-bold" : "text-muted"}`}>
+        <span className={`text-xs font-mono shrink-0 ${isWinner ? "font-bold text-green-400" : "text-muted"}`}>
           {score}
         </span>
+      )}
+      {isWinner && score != null && (
+        <span className="text-green-400 text-[10px] shrink-0">W</span>
       )}
     </button>
   );
