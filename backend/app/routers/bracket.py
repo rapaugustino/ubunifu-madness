@@ -24,7 +24,8 @@ REGION_NAMES = {"W": "East", "X": "West", "Y": "South", "Z": "Midwest"}
 REGION_CODES = {v: k for k, v in REGION_NAMES.items()}
 
 # Final Four pairings by region code
-FF_PAIRINGS = [("W", "X"), ("Y", "Z")]
+# 2026: East (W) vs South (Y), Midwest (Z) vs West (X)
+FF_PAIRINGS = [("W", "Y"), ("Z", "X")]
 
 ROUND_NAMES = ["Round of 64", "Round of 32", "Sweet 16", "Elite 8"]
 
