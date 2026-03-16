@@ -845,7 +845,8 @@ WHEN TO USE TOOLS vs. NOT:
   - "Top teams" or "best teams" -> call get_top_teams immediately
   - "How strong is the Big 12" -> call get_conference_info immediately
   - "Build my bracket" -> call build_bracket immediately
-- The user has already selected Men's or Women's basketball — all your tool calls automatically use that gender. NEVER ask which gender the user means. If they say "Duke", look up Duke in the selected gender. If they say "why is X ranked #3", just call lookup_team for that team.
+- The user has already selected Men's or Women's basketball (shown below in the context). ALL your tool calls automatically use that gender. NEVER ask which gender the user means. If they say "Duke", look up Duke in the currently selected gender. If they say "why is X ranked #3", just call lookup_team for that team.
+- IMPORTANT: The user may switch between Men's and Women's basketball mid-conversation. If earlier messages discussed one gender and the current context says a different gender, ALWAYS use the CURRENT gender. Ignore any gender assumptions from prior messages — the current selection overrides everything.
 - Use the get_todays_scores tool whenever the user asks about live games, today's scores, or recent results. You CAN check scores — just call the tool.
 
 ABOUT UBUNIFU MADNESS (answer from this when users ask about the app):
@@ -938,7 +939,9 @@ def chat(req: ChatRequest, request: Request, db: Session = Depends(get_db)):
         .limit(10)
         .all()
     )
-    overview = f"Quick reference — Top 10 {'Mens' if req.gender == 'M' else 'Womens'} teams by Elo:\n"
+    gender_label = "MEN'S" if req.gender == "M" else "WOMEN'S"
+    overview = f"CURRENT GENDER SELECTION: {gender_label} BASKETBALL\nAll tool calls and responses must be about {gender_label} basketball.\n\n"
+    overview += f"Quick reference — Top 10 {gender_label} teams by Elo:\n"
     for i, (team, elo_row) in enumerate(top_rows):
         overview += f"{i+1}. {team.name} (Elo {elo_row.elo:.0f})\n"
     overview += "\nUse your tools to look up detailed stats, matchups, and scores."

@@ -7,7 +7,7 @@ import { Send, Sparkles, Trophy, TrendingUp, AlertTriangle, Loader2 } from "luci
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Message {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
 }
 
@@ -49,11 +49,24 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [gender, setGender] = useGender();
+  const prevGenderRef = useRef(gender);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Inject a divider message when the user switches gender mid-conversation
+  useEffect(() => {
+    if (prevGenderRef.current !== gender && messages.length > 1) {
+      const label = gender === "M" ? "Men's" : "Women's";
+      setMessages((prev) => [
+        ...prev,
+        { role: "system", content: `Switched to ${label} basketball` },
+      ]);
+    }
+    prevGenderRef.current = gender;
+  }, [gender]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = async (text?: string) => {
     const userMsg = (text || input).trim();
@@ -65,9 +78,12 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      // Send only last 10 messages to keep token usage low
+      // Send only last 10 user/assistant messages to keep token usage low
+      // System divider messages are excluded — they're UI-only
       const historyToSend = newMessages
-        .filter((m) => m.role === "user" || m.role === "assistant")
+        .filter((m): m is Message & { role: "user" | "assistant" } =>
+          m.role === "user" || m.role === "assistant"
+        )
         .slice(-10);
 
       const res = await fetch(`${API_URL}/api/chat`, {
@@ -173,28 +189,36 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 space-y-4 pb-4">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                msg.role === "user"
-                  ? "bg-accent text-white rounded-br-md"
-                  : "bg-card border border-card-border rounded-bl-md"
-              }`}
-            >
-              {msg.content
-                ? msg.role === "assistant"
-                  ? renderMarkdown(msg.content)
-                  : msg.content
-                : loading && i === messages.length - 1 && (
-                    <Loader2 size={16} className="animate-spin text-muted" />
-                  )}
+        {messages.map((msg, i) =>
+          msg.role === "system" ? (
+            <div key={i} className="flex items-center gap-3 py-1">
+              <div className="flex-1 h-px bg-card-border" />
+              <span className="text-xs text-muted whitespace-nowrap">{msg.content}</span>
+              <div className="flex-1 h-px bg-card-border" />
             </div>
-          </div>
-        ))}
+          ) : (
+            <div
+              key={i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                  msg.role === "user"
+                    ? "bg-accent text-white rounded-br-md"
+                    : "bg-card border border-card-border rounded-bl-md"
+                }`}
+              >
+                {msg.content
+                  ? msg.role === "assistant"
+                    ? renderMarkdown(msg.content)
+                    : msg.content
+                  : loading && i === messages.length - 1 && (
+                      <Loader2 size={16} className="animate-spin text-muted" />
+                    )}
+              </div>
+            </div>
+          )
+        )}
 
         {/* Suggested questions */}
         {messages.length === 1 && (
