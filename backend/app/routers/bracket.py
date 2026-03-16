@@ -23,9 +23,14 @@ ROUND1_MATCHUPS = [
 REGION_NAMES = {"W": "East", "X": "West", "Y": "South", "Z": "Midwest"}
 REGION_CODES = {v: k for k, v in REGION_NAMES.items()}
 
-# Final Four pairings by region code
-# 2026: East (W) vs South (Y), Midwest (Z) vs West (X)
-FF_PAIRINGS = [("W", "Y"), ("Z", "X")]
+# Final Four pairings by region code (varies by gender in 2026)
+# Men's 2026: East (W) vs South (Y), Midwest (Z) vs West (X)
+# Women's 2026: Regional 1 (W) vs Regional 2 (X), Regional 3 (Y) vs Regional 4 (Z)
+FF_PAIRINGS_M = [("W", "Y"), ("Z", "X")]
+FF_PAIRINGS_W = [("W", "X"), ("Y", "Z")]
+
+def get_ff_pairings(gender: str):
+    return FF_PAIRINGS_W if gender == "W" else FF_PAIRINGS_M
 
 ROUND_NAMES = ["Round of 64", "Round of 32", "Sweet 16", "Elite 8"]
 
@@ -339,7 +344,7 @@ def full_bracket(
     # Final Four
     final_four = []
     ff_winners = []
-    for rc_a, rc_b in FF_PAIRINGS:
+    for rc_a, rc_b in get_ff_pairings(gender):
         tid_a = region_winners.get(rc_a)
         tid_b = region_winners.get(rc_b)
         if tid_a and tid_b:
@@ -756,7 +761,7 @@ def generate_official_bracket(
 
     # Final Four
     ff_teams = []
-    for pair_idx, (rc_a, rc_b) in enumerate(FF_PAIRINGS):
+    for pair_idx, (rc_a, rc_b) in enumerate(get_ff_pairings(gender)):
         tid_a = region_winners.get(rc_a)
         tid_b = region_winners.get(rc_b)
         if tid_a and tid_b:
