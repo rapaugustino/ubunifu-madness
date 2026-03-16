@@ -24,10 +24,11 @@ REGION_NAMES = {"W": "East", "X": "West", "Y": "South", "Z": "Midwest"}
 REGION_CODES = {v: k for k, v in REGION_NAMES.items()}
 
 # Final Four pairings by region code (varies by gender in 2026)
+# Pairings are diagonal (opposite sides of the bracket)
 # Men's 2026: East (W) vs South (Y), Midwest (Z) vs West (X)
-# Women's 2026: Regional 1 (W) vs Regional 2 (X), Regional 3 (Y) vs Regional 4 (Z)
+# Women's 2026: Regional 1 (W) vs Regional 4 (Z), Regional 2 (X) vs Regional 3 (Y)
 FF_PAIRINGS_M = [("W", "Y"), ("Z", "X")]
-FF_PAIRINGS_W = [("W", "X"), ("Y", "Z")]
+FF_PAIRINGS_W = [("W", "Z"), ("X", "Y")]
 
 def get_ff_pairings(gender: str):
     return FF_PAIRINGS_W if gender == "W" else FF_PAIRINGS_M
