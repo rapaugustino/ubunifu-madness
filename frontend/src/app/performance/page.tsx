@@ -34,6 +34,7 @@ interface Summary {
   tossups: number;
   brierScore: number | null;
   bySource: Record<string, { total: number; correct: number; accuracy: number | null }>;
+  byGameType: Record<string, { total: number; correct: number; accuracy: number | null }>;
 }
 
 interface RecentGame {
@@ -234,6 +235,51 @@ export default function PerformancePage() {
                   </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Game Type Breakdown */}
+          {summary!.byGameType && Object.keys(summary!.byGameType).length > 0 && (
+            <div className="bg-card border border-card-border rounded-xl p-4">
+              <div className="text-xs text-muted mb-3 flex items-center gap-2">
+                Accuracy by Game Type
+                <Tooltip text="How the model performs across different game contexts. Tournament games (NCAA March Madness) are typically harder to predict than regular season due to neutral sites and single-elimination pressure.">
+                  <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
+                </Tooltip>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                {Object.entries(summary!.byGameType)
+                  .sort(([a], [b]) => {
+                    const order: Record<string, number> = { tourney: 0, conf_tourney: 1, regular: 2 };
+                    return (order[a] ?? 3) - (order[b] ?? 3);
+                  })
+                  .map(([gt, data]) => {
+                    const label: Record<string, string> = {
+                      tourney: "NCAA Tournament",
+                      conf_tourney: "Conference Tournament",
+                      regular: "Regular Season",
+                    };
+                    const icon: Record<string, string> = {
+                      tourney: "🏆",
+                      conf_tourney: "🏅",
+                      regular: "📅",
+                    };
+                    return (
+                      <div key={gt} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.02] border border-card-border">
+                        <span className="text-sm">{icon[gt] || ""}</span>
+                        <div>
+                          <div className="text-xs text-muted">{label[gt] || gt}</div>
+                          <div className={`text-sm font-semibold ${
+                            data.accuracy && data.accuracy >= 0.65 ? "text-green-400" :
+                            data.accuracy && data.accuracy >= 0.5 ? "text-accent" : "text-red-400"
+                          }`}>
+                            {data.correct}/{data.total} ({data.accuracy ? (data.accuracy * 100).toFixed(1) : 0}%)
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}
