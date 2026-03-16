@@ -780,7 +780,7 @@ flowchart TD
     S5["5. Strength of Schedule<br/><i>SOS = avg opponent Elo</i>"]
     S6["6. Advanced Stats<br/><i>AdjEM, Barthag, luck, consistency, UVI</i>"]
     S7["7. Record Reconciliation<br/><i>Cross-check vs ESPN standings</i>"]
-    S8["8. Power Ratings<br/><i>AdjEM 50% + Barthag 25% + SOS 10%<br/>+ Elo 5% + Win% 5% + Momentum 5%</i>"]
+    S8["8. Power Ratings<br/><i>AdjEM 35% + Elo 25% + SOS 15%<br/>+ Barthag 15% + Win% 5% + Momentum 5%</i>"]
     S9["9. Standings + Prediction Locking<br/><i>Conference seeds, lock tomorrow's picks</i>"]
 
     S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9
@@ -800,6 +800,126 @@ The pipeline is designed to be safe to re-run:
 - Elo updates deduplicate by ESPN game ID (won't process the same game twice)
 - Prediction locking checks for existing predictions before inserting
 - Stats computations are full refreshes (replace old values)
+
+---
+
+## 12b. Bracket Generation — Model, Agent, and Consensus
+
+The app generates three types of official brackets, each using a different strategy. All three use the live V5 ML ensemble predictor for win probabilities, applied to NCAA tournament matchups (neutral site, tournament context flags enabled).
+
+### Model Bracket (Chalk)
+
+The model bracket always picks the higher-probability team. No randomness, no upsets -- pure chalk.
+
+```
+Algorithm:
+  For each matchup (starting from Round of 64):
+    prob_a = predict_matchup(team_a, team_b, is_ncaa_tourney=True, is_neutral=True)
+    winner = team_a if prob_a >= 0.5 else team_b
+    Advance winner to next round
+  Repeat through R32, Sweet 16, Elite 8, Final Four, Championship
+```
+
+This produces a bracket that represents what our model thinks is the most likely outcome at every decision point. It will rarely match reality because upsets happen, but it serves as the "baseline expectation."
+
+### Agent Bracket (Balanced Upsets)
+
+The agent bracket introduces controlled randomness to simulate realistic upset potential. It uses the model's probabilities but occasionally picks the underdog.
+
+```
+Algorithm:
+  For each matchup:
+    prob_a = predict_matchup(team_a, team_b, is_ncaa_tourney=True, is_neutral=True)
+
+    Identify favorite and underdog:
+      if prob_a >= 0.5: favorite = team_a, underdog_prob = 1 - prob_a
+      else:             favorite = team_b, underdog_prob = prob_a
+
+    Pick the underdog if BOTH conditions are met:
+      1. underdog_prob >= 0.35 (underdog has a realistic chance)
+      2. random() < 0.30 (30% dice roll)
+
+    Otherwise pick the favorite
+```
+
+This means:
+- Heavy favorites (>65% win probability) are almost never upset
+- Competitive matchups (35-50% underdog probability) have a ~30% chance of the underdog advancing
+- The bracket will have some upsets but won't be chaotic
+
+### Consensus Bracket (Model + Agent Combined)
+
+The consensus bracket merges the model and agent brackets, resolving disagreements using the model's prediction probability.
+
+```
+Algorithm:
+  Load model_bracket.picks and agent_bracket.picks
+
+  For each slot (63 total):
+    if model_pick == agent_pick:
+      consensus_pick = model_pick  (high confidence -- both agree)
+    else:
+      prob = predict_matchup(model_pick, agent_pick)
+      consensus_pick = model_pick if prob >= 0.5 else agent_pick
+      Mark slot as "contested"
+
+  Report: agreement_pct, contested_slots, contested_details
+```
+
+The consensus bracket tracks metadata:
+- `agreed_slots`: number of slots where model and agent made the same pick
+- `contested_slots`: number of disagreements
+- `agreement_pct`: percentage of agreement (typically 85-95%)
+- `contested_details`: list of slot IDs where they disagreed
+
+### Final Four Pairings
+
+The bracket structure connects regions to Final Four semifinals. These pairings are gender-specific and set by the NCAA:
+
+```mermaid
+graph LR
+    subgraph Men
+        ME["East (Duke)"] --- MFF1["Semifinal 1"]
+        MS["South (Florida)"] --- MFF1
+        MZ["Midwest (Michigan)"] --- MFF2["Semifinal 2"]
+        MW["West (Arizona)"] --- MFF2
+        MFF1 --- MC["Championship"]
+        MFF2 --- MC
+    end
+```
+
+```mermaid
+graph LR
+    subgraph Women
+        WR1["Regional 1 (UConn)"] --- WFF1["Semifinal 1"]
+        WR2["Regional 2 (UCLA)"] --- WFF1
+        WR3["Regional 3 (Texas)"] --- WFF2["Semifinal 2"]
+        WR4["Regional 4 (S. Carolina)"] --- WFF2
+        WFF1 --- WC["Championship"]
+        WFF2 --- WC
+    end
+```
+
+### First Four (Play-In Games)
+
+Before the Round of 64, 8 teams play 4 "First Four" games. Each First Four game feeds into a specific region and seed slot:
+- Winners fill the TBD slot in their assigned R64 matchup
+- Until the game is played, the bracket shows both play-in teams (e.g., "Prairie View / Lehigh")
+- Once played, the winner automatically replaces the TBD slot
+
+### Bracket Locking
+
+Official brackets (Model, Agent, Consensus) are generated once and stored permanently in the `official_brackets` table. They cannot be regenerated without an admin reset. This ensures the brackets are an honest record of what our system predicted before the tournament started.
+
+User brackets ("My Bracket") are stored in the browser's localStorage and can be modified freely until the tournament begins.
+
+### Where to find this code
+
+- Bracket generation: `backend/app/routers/bracket.py` -> `generate_official_bracket()`, `generate_consensus_bracket()`
+- Final Four pairings: `backend/app/routers/bracket.py` -> `FF_PAIRINGS_M`, `FF_PAIRINGS_W`
+- Bracket display: `backend/app/routers/bracket.py` -> `full_bracket()`
+- Frontend bracket UI: `frontend/src/app/bracket/page.tsx`
+- Admin controls: `backend/app/routers/admin.py`, `frontend/src/app/admin/page.tsx`
 
 ---
 

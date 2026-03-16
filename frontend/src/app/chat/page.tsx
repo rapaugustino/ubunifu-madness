@@ -43,7 +43,7 @@ export default function ChatPage() {
     {
       role: "assistant",
       content:
-        "Hey! I'm the Madness Agent — your bracket advisor powered by our prediction model. I can look up any D1 team's stats, compare head-to-head matchups with win probabilities, analyze conferences, check live scores, and find upset candidates.\n\nI can also explain how the app works — Elo ratings, the prediction model, strength of schedule, anything.\n\nWhat would you like to know?",
+        "Hey! I'm the Madness Agent. Ask me about any team, matchup, or upset pick — I'll pull the stats and give you a data-backed answer.",
     },
   ]);
   const [input, setInput] = useState("");
