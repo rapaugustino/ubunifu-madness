@@ -387,6 +387,60 @@ function EmailModal({
   );
 }
 
+function CopyFromMenu({
+  gender,
+  season,
+  onCopy,
+}: {
+  gender: string;
+  season: number;
+  onCopy: (picks: Record<string, number>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const copyFrom = async (bracketType: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/bracket/official?gender=${gender}&bracket_type=${bracketType}&season=${season}`
+      );
+      const data = await res.json();
+      if (data.exists && data.picks) {
+        onCopy(data.picks);
+        setOpen(false);
+      }
+    } catch {}
+    setLoading(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-2 bg-accent/10 text-accent rounded-lg text-sm font-medium hover:bg-accent/20 transition-colors"
+      >
+        <CloudDownload size={14} />
+        Start from...
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1 right-0 bg-card border border-card-border rounded-lg shadow-lg z-10 min-w-[160px]">
+          {(["model", "agent", "consensus"] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => copyFrom(type)}
+              disabled={loading}
+              className="block w-full text-left px-3 py-2 text-sm text-muted hover:text-foreground hover:bg-white/5 transition-colors first:rounded-t-lg last:rounded-b-lg"
+            >
+              {loading ? "Loading..." : type === "model" ? "Model (chalk)" : type === "agent" ? "Agent (upsets)" : "Consensus"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type BracketMode = "my_bracket" | "model" | "agent" | "consensus";
 
 const BRACKET_MODES: { key: BracketMode; label: string; description: string }[] = [
@@ -972,6 +1026,14 @@ export default function BracketPage() {
                 <RefreshCw size={14} />
                 Reset
               </button>
+              <CopyFromMenu
+                gender={gender}
+                season={bracket.season}
+                onCopy={(copiedPicks) => {
+                  setPicks(copiedPicks);
+                  localStorage.setItem(picksKey(bracket.season, gender), JSON.stringify(copiedPicks));
+                }}
+              />
             </>
           )}
           <button
