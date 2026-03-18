@@ -240,6 +240,24 @@ TOOLS = [
 # Tool execution functions
 # ---------------------------------------------------------------------------
 
+def _normalize_team_name(name: str) -> str:
+    """Normalize team name for flexible matching.
+
+    Handles abbreviation variants like 'St.' vs 'St' vs 'Saint',
+    punctuation differences, and common aliases.
+    """
+    import re
+    n = name.strip()
+    # Normalize 'Saint'/'St.' -> 'St' for consistent matching
+    n = re.sub(r"\bSaint\b", "St", n, flags=re.IGNORECASE)
+    n = re.sub(r"\bSt\.\s*", "St ", n, flags=re.IGNORECASE)
+    # Remove apostrophes/backticks (St John's -> St Johns)
+    n = n.replace("'", "").replace("'", "").replace("`", "")
+    # Collapse multiple spaces
+    n = re.sub(r"\s+", " ", n).strip()
+    return n
+
+
 def _find_team(db: Session, name: str, gender: str) -> Team | None:
     """Fuzzy-find a team by name."""
     # Try exact match first
@@ -248,7 +266,19 @@ def _find_team(db: Session, name: str, gender: str) -> Team | None:
         return team
     # Partial match
     team = db.query(Team).filter(Team.gender == gender, Team.name.ilike(f"%{name}%")).first()
-    return team
+    if team:
+        return team
+    # Normalized fuzzy match — handles St./Saint/apostrophe variants
+    normalized = _normalize_team_name(name)
+    all_teams = db.query(Team).filter(Team.gender == gender).all()
+    for t in all_teams:
+        if _normalize_team_name(str(t.name)).lower() == normalized.lower():
+            return t
+    # Normalized partial match
+    for t in all_teams:
+        if normalized.lower() in _normalize_team_name(str(t.name)).lower():
+            return t
+    return None
 
 
 def _team_detail(db: Session, team: Team) -> dict:
@@ -817,6 +847,149 @@ TOOL_DISPATCH = {
 }
 
 
+def _summarize_team(t: dict[str, any]) -> str:
+    """Condense a full team detail dict into a compact text summary."""
+    parts = [f"{t['name']}"]
+    if t.get("seed"):
+        parts[0] = f"#{t['seed']} {t['name']}"
+    if t.get("conference"):
+        parts.append(t["conference"])
+    if t.get("record"):
+        parts.append(f"{t['record']} ({t.get('winPct', '?')})")
+    if t.get("elo"):
+        parts.append(f"Elo {t['elo']}")
+    line = " | ".join(parts)
+
+    # Key stats (only include what exists)
+    stats = t.get("stats", {})
+    adv = t.get("advancedStats", {})
+    stat_parts = []
+    if adv.get("adjEM") is not None:
+        stat_parts.append(f"AdjEM {adv['adjEM']}")
+    if adv.get("adjOE") is not None:
+        stat_parts.append(f"AdjOE {adv['adjOE']}")
+    if adv.get("adjDE") is not None:
+        stat_parts.append(f"AdjDE {adv['adjDE']}")
+    if stats.get("eFG%") is not None:
+        stat_parts.append(f"eFG {stats['eFG%']}%")
+    if stats.get("oppEFG%") is not None:
+        stat_parts.append(f"OppEFG {stats['oppEFG%']}%")
+    if stats.get("turnoverRate") is not None:
+        stat_parts.append(f"TO% {stats['turnoverRate']}")
+    if stats.get("offReboundRate") is not None:
+        stat_parts.append(f"ORB% {stats['offReboundRate']}%")
+    if stats.get("freeThrowRate") is not None:
+        stat_parts.append(f"FTR {stats['freeThrowRate']}%")
+    if stats.get("strengthOfSchedule") is not None:
+        stat_parts.append(f"SOS {stats['strengthOfSchedule']}")
+    if adv.get("threePtRate") is not None:
+        stat_parts.append(f"3PR {adv['threePtRate']}%")
+    if adv.get("trueShootingPct") is not None:
+        stat_parts.append(f"TS {adv['trueShootingPct']}%")
+    if stat_parts:
+        line += "\nStats: " + ", ".join(stat_parts)
+
+    mom = t.get("momentum", {})
+    if mom.get("last10WinPct"):
+        line += f"\nMomentum: Last10 {mom['last10WinPct']}"
+        if mom.get("last10PointDiff"):
+            line += f", PPD {mom['last10PointDiff']:+.1f}"
+
+    coach = t.get("coach", {})
+    if coach.get("name"):
+        line += f"\nCoach: {coach['name']}"
+        if coach.get("tenure"):
+            line += f" ({coach['tenure']}yr)"
+        if coach.get("marchMadnessWinRate"):
+            line += f", March {coach['marchMadnessWinRate']}"
+
+    return line
+
+
+def _format_tool_result(tool_name: str, result: dict) -> str:
+    """Convert raw tool result dict into a concise text summary for the LLM context."""
+    if "error" in result:
+        return result["error"]
+
+    if tool_name == "lookup_team":
+        return _summarize_team(result)
+
+    if tool_name == "get_matchup_prediction":
+        pred = result.get("prediction", {})
+        team_a = result.get("teamA", {})
+        team_b = result.get("teamB", {})
+        favored = pred.get("favored", "?")
+        confidence = pred.get("confidence", "?")
+        is_tossup = pred.get("isTossup", False)
+
+        # Lead with the prediction — this is the most important line
+        lines = []
+        if is_tossup:
+            lines.append(f"PREDICTION: TOSSUP — neither team favored above 55%.")
+        else:
+            lines.append(f"PREDICTION: {favored} wins at {confidence} confidence.")
+
+        # Show both probabilities explicitly
+        for key, val in pred.items():
+            if key.endswith("_winProb"):
+                team_name = key.replace("_winProb", "")
+                lines.append(f"  {team_name}: {val}")
+
+        lines.append(f"Source: {pred.get('source', '?')}")
+
+        # Explanation from model (top factors)
+        explanation = pred.get("explanation")
+        if explanation:
+            lines.append(f"Key factors: {explanation}")
+
+        lines.append("")
+        lines.append(f"--- {team_a.get('name', '?')} ---")
+        lines.append(_summarize_team(team_a))
+        lines.append("")
+        lines.append(f"--- {team_b.get('name', '?')} ---")
+        lines.append(_summarize_team(team_b))
+
+        # Style matchup (brief)
+        style = result.get("styleMatchup", {})
+        if style:
+            lines.append("")
+            ta_style = style.get("teamAStyle", {})
+            tb_style = style.get("teamBStyle", {})
+            if ta_style.get("style"):
+                lines.append(f"{team_a.get('name', '?')} style: {ta_style['style']} (tempo {ta_style.get('tempo', '?')})")
+            if tb_style.get("style"):
+                lines.append(f"{team_b.get('name', '?')} style: {tb_style['style']} (tempo {tb_style.get('tempo', '?')})")
+
+        return "\n".join(lines)
+
+    if tool_name == "get_top_teams":
+        teams = result.get("teams", [])
+        lines = [f"Top {len(teams)} {result.get('gender', '')} teams by Elo:"]
+        for t in teams:
+            seed = f"#{t['seed']} " if t.get("seed") else ""
+            lines.append(f"{t['rank']}. {seed}{t['name']} — Elo {t['elo']}, {t['record']} ({t.get('conference', '?')})")
+        return "\n".join(lines)
+
+    if tool_name == "get_conference_info":
+        lines = [f"{result.get('conference', '?')} ({result.get('abbrev', '?')})"]
+        lines.append(f"Avg Elo: {result.get('avgElo')}, Top5 Elo: {result.get('top5Elo')}, NC Win%: {result.get('ncWinRate')}, Parity: {result.get('parity')}")
+        for t in result.get("teams", []):
+            lines.append(f"  {t['name']} — Elo {t['elo']}, {t['record']}")
+        return "\n".join(lines)
+
+    if tool_name == "get_upset_candidates":
+        candidates = result.get("upsetCandidates", [])
+        if not candidates:
+            return result.get("message", "No upset candidates found.")
+        lines = ["Upset candidates:"]
+        for c in candidates:
+            lines.append(f"- {c.get('underdog', '?')} over {c.get('favorite', '?')}: {c.get('upsetProb', '?')} upset chance. {c.get('reason', '')}")
+        return "\n".join(lines)
+
+    # Default: return JSON but that shouldn't happen for known tools
+    return json.dumps(result, default=str)
+
+
 def _execute_tool(db: Session, gender: str, tool_name: str, tool_input: dict) -> dict:
     fn = TOOL_DISPATCH.get(tool_name)
     if not fn:
@@ -896,7 +1069,8 @@ TONE AND UNCERTAINTY:
 - Use natural hedging language: "I'd lean toward", "the numbers suggest", "if forced to pick", "there's a real case for either side."
 - When discussing upset potential, frame it as opportunity: "this is the kind of game that busts brackets, but that's also what makes it exciting to pick."
 
-GROUNDING AND ACCURACY — CRITICAL:
+GROUNDING AND ACCURACY — THIS IS THE #1 MOST IMPORTANT RULE:
+- You MUST state the EXACT win probability returned by the get_matchup_prediction tool. NEVER invent, round dramatically, or flip the win probability. If the tool says team A has a 74% win probability, you MUST say team A is favored at 74%. Getting the prediction wrong is the WORST possible mistake you can make.
 - ONLY state facts that come directly from your tool results. If a tool didn't return a specific piece of data, do NOT guess or infer it.
 - NEVER project or guess tournament seeds unless the seed is returned by the lookup_team tool. If the seed field is null/missing, say "seeds haven't been announced yet" or "we don't have seed data yet" — do NOT estimate seeds based on Elo or ranking.
 - NEVER fabricate a team's playing style. Determine style ONLY from the actual stats returned:
@@ -904,21 +1078,25 @@ GROUNDING AND ACCURACY — CRITICAL:
   - Check eFG% AND offensive efficiency rank context. High raw efficiency doesn't automatically mean "elite offense" — our efficiency scale differs from KenPom's.
   - Check turnover rate, offensive rebound rate, and free throw rate to characterize style, not assumptions.
 - NEVER claim a team is "elite" at something without the stats to back it up. If adjOE is high but you don't know how it compares nationally, say "strong offensive efficiency" not "tier-1 elite offense."
-- When writing scouting reports or analysis, clearly separate FACTS (from tools) from INTERPRETATION (your analysis). Prefix interpretive statements with qualifiers like "based on these numbers" or "this suggests."
 - Do NOT make up win-loss records, rankings, or stats. Use ONLY the exact numbers returned by your tools.
 - Our efficiency metrics (adjOE, adjDE, AdjEM) use our own scale and may differ from KenPom/Torvik. Do NOT compare our numbers to KenPom benchmarks — compare teams against each other within our system.
 - For upset vulnerability, consistency, and luck: report the numbers and explain what they mean, but don't over-dramatize. A luck factor of 0.01 is essentially neutral — don't call it a "weakness."
 
+RESPONSE LENGTH — CRITICAL:
+- Keep matchup analysis SHORT: state the prediction, give the top 2-3 reasons the favored team wins, mention 1-2 upset factors, and stop.
+- MAXIMUM 8-12 sentences for a matchup analysis. Do NOT write exhaustive scouting reports unless the user specifically asks for a "detailed breakdown" or "full analysis."
+- Do NOT list every single stat returned by the tool. Pick the 3-4 most meaningful differences and explain those.
+- NEVER dump both teams' full stat lines. Compare the stats that actually matter for this specific matchup.
+
 Rules:
 - When using tools, ground every claim in specific numbers (Elo, win probability, record, efficiency).
-- Be concise and direct. Use bullet points for comparisons.
 - NEVER use markdown formatting — no headers (##), no bold (**text**), no backticks (`), no italic (*text*). Use plain text only.
 - Use bullet points (- ) and line breaks for structure. Use CAPS for emphasis instead of bold.
 - If a tool returns an error, tell the user honestly.
 - No betting advice. This is for bracket strategy only.
 - When comparing teams, explain WHY one team has an edge — which specific stats matter.
 - For upset picks, explain the statistical basis (e.g. "their 3PT defense is weak and the underdog shoots 38% from 3").
-- Keep responses focused. 2-4 paragraphs max for data questions, shorter for general questions."""
+- Keep responses focused. Short and punchy, like a TV analyst giving a quick take, not a research paper."""
 
 
 # ---------------------------------------------------------------------------
@@ -994,14 +1172,16 @@ def chat(req: ChatRequest, request: Request, db: Session = Depends(get_db)):
 
             current_messages.append({"role": "assistant", "content": assistant_content})
 
-            # Execute each tool and build results
+            # Execute each tool and build summarized results
             tool_results = []
             for tb in tool_blocks:
                 result = _execute_tool(db, req.gender, tb.name, tb.input)
+                # Format as concise text instead of raw JSON to reduce context bloat
+                formatted = _format_tool_result(tb.name, result)
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tb.id,
-                    "content": json.dumps(result, default=str),
+                    "content": formatted,
                 })
 
             current_messages.append({"role": "user", "content": tool_results})
