@@ -1,4 +1,5 @@
 import random
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from app.models import (
     Team, TourneySeed, Prediction, EloRating,
     TeamConference, TeamSeasonStats, GameResult, Conference,
 )
+from app.models.game_prediction import GamePrediction
 from app.models.official_bracket import OfficialBracket
 from app.services.predictor import predict_matchup
 
@@ -215,6 +217,38 @@ def full_bracket(
                 t = db.query(Team).filter(Team.id == tid).first()
                 if t:
                     team_by_id[tid] = t
+
+    # Fallback: also check resolved GamePredictions for games not yet in GameResult
+    # (handles the gap between live score resolution and the next cron run)
+    resolved_preds = (
+        db.query(GamePrediction)
+        .filter(
+            GamePrediction.season == actual_season,
+            GamePrediction.gender == gender,
+            GamePrediction.game_type == "tourney",
+            GamePrediction.winner_team_id.isnot(None),
+        )
+        .all()
+    )
+    for pred in resolved_preds:
+        if pred.away_team_id and pred.home_team_id:
+            key = frozenset([pred.away_team_id, pred.home_team_id])
+            if key not in result_lookup:
+                if pred.winner_team_id == pred.away_team_id:
+                    w_id, w_score = pred.away_team_id, pred.away_score
+                    l_id, l_score = pred.home_team_id, pred.home_score
+                else:
+                    w_id, w_score = pred.home_team_id, pred.home_score
+                    l_id, l_score = pred.away_team_id, pred.away_score
+                result_lookup[key] = SimpleNamespace(
+                    w_team_id=w_id, w_score=w_score,
+                    l_team_id=l_id, l_score=l_score,
+                )
+                for tid in [pred.away_team_id, pred.home_team_id]:
+                    if tid not in team_by_id:
+                        t = db.query(Team).filter(Team.id == tid).first()
+                        if t:
+                            team_by_id[tid] = t
 
     is_complete = len(tourney_games) >= 63  # Full tournament = 63 games (67 with play-in)
 

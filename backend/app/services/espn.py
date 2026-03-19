@@ -104,7 +104,13 @@ def get_scoreboard(date: str | None = None, gender: str = "M") -> list[dict]:
         notes = comp.get("notes", [])
         headline = notes[0].get("headline", "") if notes else ""
         tournament_id = comp.get("tournamentId")
-        if "NCAA" in headline or "March Madness" in headline:
+        season_type = event.get("season", {}).get("type")
+        headline_upper = headline.upper()
+        if ("NCAA" in headline_upper or "MARCH MADNESS" in headline_upper
+                or "FIRST FOUR" in headline_upper):
+            game_type = "tourney"
+        elif season_type == 3:
+            # ESPN postseason type — NCAA tournament, NIT, etc.
             game_type = "tourney"
         elif tournament_id or "Tournament" in headline:
             game_type = "conf_tourney"
