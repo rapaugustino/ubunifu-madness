@@ -299,7 +299,7 @@ export default function ScoresPage() {
   const tossupCount = finalGames.filter((g) => g.winProb && Math.max(g.winProb.away, g.winProb.home) < 0.55).length;
 
   return (
-    <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

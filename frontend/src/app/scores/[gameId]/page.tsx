@@ -137,7 +137,7 @@ export default function GameDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <div className="text-center text-muted py-20">Loading game...</div>
       </div>
     );
@@ -145,7 +145,7 @@ export default function GameDetailPage() {
 
   if (error || !game) {
     return (
-      <div className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <Link
           href="/scores"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors mb-6"
@@ -203,7 +203,7 @@ export default function GameDetailPage() {
   const statColumns = ["MIN", "FG", "3PT", "FT", "OREB", "DREB", "REB", "AST", "STL", "BLK", "TO", "PF", "PTS"];
 
   return (
-    <div className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">
       {/* Back link */}
       <div className="flex items-center justify-between mb-6">
         <Link

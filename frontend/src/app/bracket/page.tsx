@@ -562,7 +562,7 @@ export default function BracketPage() {
 
   if (!bracket || !bracket.hasBracket) {
     return (
-      <div className="min-h-screen max-w-5xl mx-auto px-4 py-8">
+      <div className="min-h-screen max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-2">Interactive Bracket</h1>
         <p className="text-muted">No bracket data available yet. Check back after Selection Sunday.</p>
       </div>

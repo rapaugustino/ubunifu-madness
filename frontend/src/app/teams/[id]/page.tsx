@@ -214,7 +214,7 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
 
   if (!team) {
     return (
-      <div className="min-h-screen max-w-5xl mx-auto px-4 py-8">
+      <div className="min-h-screen max-w-7xl mx-auto px-4 py-8">
         <Link href="/teams" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground mb-6">
           <ArrowLeft size={14} /> All Teams
         </Link>
@@ -228,7 +228,7 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
   const trendDown = momentum?.lastNWinPct != null && team.winPct != null && momentum.lastNWinPct < team.winPct - 0.05;
 
   return (
-    <div className="min-h-screen max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <Link href="/teams" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground mb-6">
         <ArrowLeft size={14} /> All Teams
       </Link>
