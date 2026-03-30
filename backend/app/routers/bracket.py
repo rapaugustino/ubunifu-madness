@@ -400,7 +400,7 @@ def full_bracket(
                 ff_winners.append(None)
         else:
             final_four.append(None)
-            ff_winners.append(tid_a or tid_b)
+            ff_winners.append(None)
 
     # Championship
     championship = []

@@ -57,13 +57,23 @@ export function useBracketSync(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [season, gender]);
 
+  // Track current gender to prevent saving stale picks during gender switch
+  const genderRef = useRef(gender);
+  genderRef.current = gender;
+
   // Auto-save picks when they change (debounced), only if user is identified
   useEffect(() => {
     if (!state.userId || !season || Object.keys(picks).length === 0) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    // Capture gender at schedule time to compare later
+    const scheduledGender = gender;
     debounceRef.current = setTimeout(() => {
-      savePicks(state.userId!, picksRef.current);
+      // Only save if gender hasn't changed since we scheduled
+      if (genderRef.current === scheduledGender) {
+        savePicks(state.userId!, picksRef.current);
+      }
     }, 800);
 
     return () => {
@@ -147,6 +157,13 @@ export function useBracketSync(
     setState({ email: null, userId: null, saving: false, lastSaved: null });
   };
 
+  const manualSave = useCallback(() => {
+    if (state.userId && Object.keys(picksRef.current).length > 0) {
+      savePicks(state.userId, picksRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.userId, season, gender]);
+
   return {
     ...state,
     showModal,
@@ -156,6 +173,7 @@ export function useBracketSync(
     openSaveModal,
     openLoadModal,
     disconnect,
+    manualSave,
     isConnected: !!state.userId,
   };
 }
