@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useGender } from "@/hooks/useGender";
 import { TrendingUp, Check, X, Activity, Target, BarChart3, Info } from "lucide-react";
 import { Tooltip } from "@/components/Tooltip";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
 
 interface DailyData {
   date: string;
@@ -389,14 +388,14 @@ function CalibrationChart({ bins }: { bins: CalibrationBin[] }) {
           <Info size={12} className="text-muted/40 hover:text-muted cursor-help" />
         </Tooltip>
       </div>
-      <div className="text-[10px] text-muted mb-4">
+      <div className="text-xs text-muted mb-4">
         Perfect calibration: predicted probability matches actual win rate.
         Points close together = well-calibrated.
       </div>
 
       {/* Simple table-based calibration display */}
       <div className="space-y-2">
-        <div className="flex items-center gap-3 text-[10px] text-muted font-medium border-b border-card-border pb-2">
+        <div className="flex items-center gap-3 text-xs text-muted font-medium border-b border-card-border pb-2">
           <span className="w-24">Predicted</span>
           <span className="w-24">Actual Win%</span>
           <span className="flex-1">Calibration</span>
@@ -424,7 +423,7 @@ function CalibrationChart({ bins }: { bins: CalibrationBin[] }) {
                   />
                   <div className="absolute inset-0 border-b border-white/5" style={{ top: "50%" }} />
                 </div>
-                <span className={`text-[10px] w-14 ${isGood ? "text-green-400" : isOk ? "text-yellow-400" : "text-red-400"}`}>
+                <span className={`text-xs w-14 ${isGood ? "text-green-400" : isOk ? "text-yellow-400" : "text-red-400"}`}>
                   {diff < 0.01 ? "±0" : `${diff > 0 ? "+" : ""}${(diff * 100).toFixed(1)}%`}
                 </span>
               </div>
@@ -434,7 +433,7 @@ function CalibrationChart({ bins }: { bins: CalibrationBin[] }) {
         })}
       </div>
 
-      <div className="mt-4 flex gap-4 text-[10px] text-muted">
+      <div className="mt-4 flex gap-4 text-xs text-muted">
         <span className="flex items-center gap-1"><span className="w-2 h-2 bg-accent rounded-full" /> Predicted</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-400 rounded-full" /> Actual (good)</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 bg-yellow-400 rounded-full" /> Actual (ok)</span>
@@ -502,7 +501,7 @@ function GameLog({ games }: { games: RecentGame[] }) {
                   </td>
                   <td className="p-3 text-center">
                     <span className={isTossup ? "text-muted/60" : "text-muted"}>{favName}</span>
-                    {isTossup && <span className="text-yellow-400/70 text-[10px] ml-1">TOSSUP</span>}
+                    {isTossup && <span className="text-yellow-400/70 text-xs ml-1">TOSSUP</span>}
                   </td>
                   <td className="p-3 text-center font-mono">
                     {(confidence * 100).toFixed(0)}%

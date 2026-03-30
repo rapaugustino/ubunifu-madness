@@ -3,22 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models import Prediction, Team, EloRating, TourneySeed, TeamConference, TeamSeasonStats
+from app.utils.team_helpers import build_team_dict
 
 router = APIRouter(tags=["predictions"])
-
-
-def _team_base(team, elo, seed, conf, stats):
-    record = f"{stats.wins}-{stats.losses}" if stats else None
-    return {
-        "id": team.id,
-        "name": team.name,
-        "gender": team.gender,
-        "seed": seed,
-        "conference": conf,
-        "elo": round(elo, 1) if elo else None,
-        "record": record,
-        "winPct": round(stats.win_pct, 3) if stats else None,
-    }
 
 
 @router.get("/predictions/{team_a_id}/{team_b_id}")
@@ -69,14 +56,14 @@ def get_prediction(
 
     return {
         "season": season,
-        "teamA": _team_base(
+        "teamA": build_team_dict(
             team_lo if team_a_id <= team_b_id else team_hi,
             elo_lo if team_a_id <= team_b_id else elo_hi,
             seed_lo if team_a_id <= team_b_id else seed_hi,
             conf_lo if team_a_id <= team_b_id else conf_hi,
             stats_lo if team_a_id <= team_b_id else stats_hi,
         ),
-        "teamB": _team_base(
+        "teamB": build_team_dict(
             team_hi if team_a_id <= team_b_id else team_lo,
             elo_hi if team_a_id <= team_b_id else elo_lo,
             seed_hi if team_a_id <= team_b_id else seed_lo,

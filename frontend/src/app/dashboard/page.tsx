@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import { useGender } from "@/hooks/useGender";
 import { TrendingUp, TrendingDown, Minus, Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
 
 interface RankingTeam {
   id: number;
@@ -697,7 +696,7 @@ function StatCell({
 }) {
   return (
     <div className="px-3 py-2 rounded-lg bg-card border border-card-border/50">
-      <MetricLabel label={label} tooltip={tooltip} className="text-[10px] text-muted uppercase tracking-wider mb-1" />
+      <MetricLabel label={label} tooltip={tooltip} className="text-xs text-muted uppercase tracking-wider mb-1" />
       <div className={`text-sm font-mono ${highlight ? "font-bold text-accent" : valueClass || "text-foreground"}`}>
         {value}
       </div>

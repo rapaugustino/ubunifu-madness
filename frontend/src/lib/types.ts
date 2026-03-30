@@ -1,43 +1,42 @@
-export interface Team {
-  id: number;
+/* ── ESPN scoreboard types (used by home, scores, game detail pages) ── */
+
+export interface TeamScore {
+  espnId: number;
   name: string;
-  seed: number;
-  conference: string;
-  elo: number;
-  record: string;
-  winPct: number;
-  logo?: string;
-  gender: "M" | "W";
+  abbreviation: string;
+  logo: string | null;
+  color: string | null;
+  score: number;
+  homeAway: string;
+  record: string | null;
+  rank: number | null;
+  kaggleId: number | null;
+  elo: number | null;
 }
 
-export interface Matchup {
-  teamA: Team;
-  teamB: Team;
-  winProbA: number;
-  round: number;
-  region: string;
+export interface LockedPrediction {
+  probAway: number;
+  probHome: number;
+  source: string;
+  explanation: string | null;
+  lockedAt: string | null;
+  resolved: boolean;
+  correct: boolean | null;
 }
 
-export interface TeamStats {
-  elo: number;
-  seed: number;
-  confStrength: number;
-  offEfficiency: number;
-  defEfficiency: number;
-  tempo: number;
-  sosRank: number;
-  momentum: number;
-  record: string;
-  conference: string;
-}
-
-export interface PowerRanking {
-  rank: number;
-  team: Team;
-  elo: number;
-  record: string;
-  conference: string;
-  confStrength: number;
-  trend: "up" | "down" | "same";
-  trendAmount: number;
+export interface Game {
+  id: string;
+  date: string;
+  venue: string | null;
+  status: string;
+  statusDetail: string;
+  clock: string | null;
+  period: number | null;
+  broadcast: string | null;
+  away: TeamScore;
+  home: TeamScore;
+  gameType: "regular" | "conf_tourney" | "tourney" | null;
+  headline: string | null;
+  winProb: { away: number; home: number } | null;
+  lockedPrediction: LockedPrediction | null;
 }

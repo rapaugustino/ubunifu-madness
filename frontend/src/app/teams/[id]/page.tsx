@@ -4,8 +4,7 @@ import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
 
 interface Player {
   id: string;
@@ -415,15 +414,15 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
                                 <div>
                                   <div className="flex items-center gap-1.5">
                                     <span className={`font-medium ${isKey ? "" : ""}`}>{p.name}</span>
-                                    {isKey && <span className="text-[9px] bg-accent/20 text-accent px-1 rounded">KEY</span>}
+                                    {isKey && <span className="text-xs bg-accent/20 text-accent px-1 rounded">KEY</span>}
                                     {p.injuryStatus && (
-                                      <span className="flex items-center gap-0.5 text-[9px] bg-red-500/20 text-red-400 px-1 rounded">
+                                      <span className="flex items-center gap-0.5 text-xs bg-red-500/20 text-red-400 px-1 rounded">
                                         <AlertTriangle size={8} />
                                         {p.injuryStatus}
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[10px] text-muted">{p.experience}</span>
+                                  <span className="text-xs text-muted">{p.experience}</span>
                                 </div>
                               </div>
                             </td>
@@ -444,7 +443,7 @@ export default function TeamPage({ params }: { params: Promise<{ id: string }> }
                                       style={{ width: `${Math.min(p.stats.importanceScore * 400, 100)}%` }}
                                     />
                                   </div>
-                                  <span className="text-[10px] text-muted font-mono w-8">
+                                  <span className="text-xs text-muted font-mono w-8">
                                     {(p.stats.importanceScore * 100).toFixed(0)}%
                                   </span>
                                 </div>

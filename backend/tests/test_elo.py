@@ -4,13 +4,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from app.elo_config import K_FACTOR, HOME_ADV, SEASON_REGRESSION, MEAN_ELO
 from scripts.compute_stats import (
     expected_win_prob,
     compute_elo_ratings,
-    K_FACTOR,
-    HOME_ADV,
-    SEASON_REGRESSION,
-    MEAN_ELO,
     r,
 )
 

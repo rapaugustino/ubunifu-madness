@@ -14,50 +14,8 @@ import {
   GitCompareArrows,
   RefreshCw,
 } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-/* ── Shared types (mirror scores page) ── */
-
-interface TeamScore {
-  espnId: number;
-  name: string;
-  abbreviation: string;
-  logo: string | null;
-  color: string | null;
-  score: number;
-  homeAway: string;
-  record: string | null;
-  rank: number | null;
-  kaggleId: number | null;
-  elo: number | null;
-}
-
-interface LockedPrediction {
-  probAway: number;
-  probHome: number;
-  source: string;
-  lockedAt: string | null;
-  resolved: boolean;
-  correct: boolean | null;
-}
-
-interface Game {
-  id: string;
-  date: string;
-  venue: string | null;
-  status: string;
-  statusDetail: string;
-  clock: string | null;
-  period: number | null;
-  broadcast: string | null;
-  away: TeamScore;
-  home: TeamScore;
-  gameType: "regular" | "conf_tourney" | "tourney" | null;
-  headline: string | null;
-  winProb: { away: number; home: number } | null;
-  lockedPrediction: LockedPrediction | null;
-}
+import { API_URL } from "@/lib/api";
+import type { Game } from "@/lib/types";
 
 interface BoxTeam {
   name: string;
@@ -425,7 +383,7 @@ export default function GameDetailPage() {
 
           {/* Prediction metadata */}
           {game.lockedPrediction && (
-            <div className="flex items-center gap-3 mt-3 text-[10px] text-muted">
+            <div className="flex items-center gap-3 mt-3 text-xs text-muted">
               <span>Source: {game.lockedPrediction.source}</span>
               {game.lockedPrediction.lockedAt && (
                 <span>

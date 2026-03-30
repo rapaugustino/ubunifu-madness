@@ -5,8 +5,7 @@ import { useGender } from "@/hooks/useGender";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
 
 const CATEGORIES = [
   { key: "ppg", label: "Points", unit: "PPG", tip: "ppg" },

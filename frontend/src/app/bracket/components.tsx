@@ -59,7 +59,7 @@ export function TeamSlot({
       )}
       <div className="flex items-center gap-1 min-w-0 flex-1">
         {team.seed && (
-          <span className="text-[10px] text-muted font-mono shrink-0">{team.seed}</span>
+          <span className="text-xs text-muted font-mono shrink-0">{team.seed}</span>
         )}
         <span className={`text-xs truncate ${isEliminated ? "line-through text-red-400/60" : isWinner || isPicked ? "font-semibold" : ""}`}>
           {team.name}
@@ -71,13 +71,13 @@ export function TeamSlot({
         </span>
       )}
       {isEliminated && (
-        <span className="text-red-400 text-[10px] font-bold shrink-0">X</span>
+        <span className="text-red-400 text-xs font-bold shrink-0">X</span>
       )}
       {isCorrectPick && (
-        <span className="text-green-400 text-[10px] font-bold shrink-0">&#10003;</span>
+        <span className="text-green-400 text-xs font-bold shrink-0">&#10003;</span>
       )}
       {isWinner && score != null && !isEliminated && !isCorrectPick && (
-        <span className="text-green-400 text-[10px] shrink-0">W</span>
+        <span className="text-green-400 text-xs shrink-0">W</span>
       )}
     </button>
   );
@@ -447,7 +447,7 @@ export function MiniSlot({
   if (!team) {
     return (
       <div className="flex items-center gap-1 px-1 py-0.5 min-h-[20px]">
-        <span className="text-[9px] text-muted">TBD</span>
+        <span className="text-xs text-muted">TBD</span>
       </div>
     );
   }
@@ -466,9 +466,9 @@ export function MiniSlot({
       {team.logo && (
         <img src={team.logo} alt="" className={`w-3 h-3 object-contain shrink-0 ${isEliminated ? "grayscale" : ""}`} />
       )}
-      <span className="text-[9px] text-muted font-mono shrink-0">{team.seed}</span>
+      <span className="text-xs text-muted font-mono shrink-0">{team.seed}</span>
       <span
-        className={`text-[10px] truncate max-w-[72px] ${
+        className={`text-xs truncate max-w-[72px] ${
           isEliminated ? "line-through text-red-400/60" : isWinner ? "font-semibold" : ""
         }`}
         title={team.name}
@@ -476,12 +476,12 @@ export function MiniSlot({
         {abbreviateTeam(team.name)}
       </span>
       {score != null && (
-        <span className={`text-[9px] font-mono ml-auto shrink-0 ${isWinner ? "text-green-400" : "text-muted"}`}>
+        <span className={`text-xs font-mono ml-auto shrink-0 ${isWinner ? "text-green-400" : "text-muted"}`}>
           {score}
         </span>
       )}
-      {isEliminated && <span className="text-red-400 text-[8px] font-bold shrink-0 ml-auto">X</span>}
-      {isCorrectPick && <span className="text-green-400 text-[8px] font-bold shrink-0 ml-auto">&#10003;</span>}
+      {isEliminated && <span className="text-red-400 text-[10px] font-bold shrink-0 ml-auto">X</span>}
+      {isCorrectPick && <span className="text-green-400 text-[10px] font-bold shrink-0 ml-auto">&#10003;</span>}
     </div>
   );
 }
@@ -504,7 +504,7 @@ export function MiniMatchupCard({
   if (!matchup || (!matchup.teamA && !matchup.teamB)) {
     return (
       <div className="rounded bg-card/50 border border-card-border border-dashed min-h-[42px] flex items-center justify-center">
-        <span className="text-[9px] text-muted">TBD</span>
+        <span className="text-xs text-muted">TBD</span>
       </div>
     );
   }
@@ -582,7 +582,7 @@ export function FullBracketView({
 
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] font-semibold text-accent uppercase tracking-wider mb-1.5 px-1">
+        <div className="text-xs font-semibold text-accent uppercase tracking-wider mb-1.5 px-1">
           {regionName}
         </div>
         <div className={`flex gap-1.5 ${reverse ? "flex-row-reverse" : ""}`}>
@@ -590,7 +590,7 @@ export function FullBracketView({
             const actualRoundIdx = reverse ? region.rounds.length - 1 - displayIdx : displayIdx;
             return (
               <div key={displayIdx} className="flex-1 min-w-0">
-                <div className="text-[8px] text-muted uppercase tracking-wider mb-1 truncate px-0.5">
+                <div className="text-[10px] text-muted uppercase tracking-wider mb-1 truncate px-0.5">
                   {roundNames[displayIdx]?.replace("Round of ", "R")}
                 </div>
                 <div className="space-y-1" style={{ paddingTop: `${Math.pow(2, actualRoundIdx) * 4 - 4}px` }}>
@@ -624,7 +624,7 @@ export function FullBracketView({
         <div className="flex gap-3 mb-4 items-start">
           {renderRegion(topLeft, false)}
           <div className="w-[140px] shrink-0 flex flex-col items-center justify-center pt-16">
-            <div className="text-[8px] text-muted uppercase tracking-wider mb-1">Semifinal 1</div>
+            <div className="text-[10px] text-muted uppercase tracking-wider mb-1">Semifinal 1</div>
             <MiniMatchupCard
               matchup={getMatchup(bracket.finalFour[0], "ff_0")}
               picks={displayPicks}
@@ -638,7 +638,7 @@ export function FullBracketView({
         {/* Championship */}
         <div className="flex justify-center my-3">
           <div className="w-[160px]">
-            <div className="text-[9px] text-accent uppercase tracking-wider font-semibold mb-1 text-center">
+            <div className="text-xs text-accent uppercase tracking-wider font-semibold mb-1 text-center">
               Championship
             </div>
             <MiniMatchupCard
@@ -650,7 +650,7 @@ export function FullBracketView({
             {bracket.champion && (
               <div className="flex items-center gap-1 justify-center mt-1.5">
                 <Trophy size={10} className="text-accent" />
-                <span className="text-[10px] font-bold">{bracket.champion.name}</span>
+                <span className="text-xs font-bold">{bracket.champion.name}</span>
               </div>
             )}
           </div>
@@ -660,7 +660,7 @@ export function FullBracketView({
         <div className="flex gap-3 mt-4 items-start">
           {renderRegion(bottomLeft, false)}
           <div className="w-[140px] shrink-0 flex flex-col items-center justify-center pt-16">
-            <div className="text-[8px] text-muted uppercase tracking-wider mb-1">Semifinal 2</div>
+            <div className="text-[10px] text-muted uppercase tracking-wider mb-1">Semifinal 2</div>
             <MiniMatchupCard
               matchup={getMatchup(bracket.finalFour[1], "ff_1")}
               picks={displayPicks}

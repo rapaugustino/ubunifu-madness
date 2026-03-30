@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import { useGender } from "@/hooks/useGender";
 import Link from "next/link";
 import { Search } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
 
 interface TeamItem {
   id: number;
@@ -110,7 +109,7 @@ export default function TeamsPage() {
               <div className="flex items-center justify-between text-xs text-muted">
                 <div className="flex items-center gap-2">
                   {team.seed && (
-                    <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px] font-medium">
+                    <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-xs font-medium">
                       #{team.seed}
                     </span>
                   )}

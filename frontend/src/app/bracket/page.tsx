@@ -849,7 +849,7 @@ export default function BracketPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
             {bracket.firstFour.map((matchup, i) => (
               <div key={`ff4_${i}`}>
-                <div className="text-[10px] text-muted mb-1 uppercase tracking-wider">
+                <div className="text-xs text-muted mb-1 uppercase tracking-wider">
                   {matchup.region} Region — {matchup.seed} Seed
                 </div>
                 <MatchupCard

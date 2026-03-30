@@ -17,8 +17,9 @@ import {
   Award,
   Calendar,
 } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
+import type { Game } from "@/lib/types";
+import { todayStr, yesterdayStr, tomorrowStr, displayDateLong, displayDateShort } from "@/lib/date-utils";
 
 // ---------- Types ----------
 
@@ -26,45 +27,6 @@ interface AccuracyData {
   men: { total: number; correct: number; accuracy: number | null };
   women: { total: number; correct: number; accuracy: number | null };
   overall: { total: number; correct: number; accuracy: number | null };
-}
-
-interface TeamScore {
-  espnId: number;
-  name: string;
-  abbreviation: string;
-  logo: string | null;
-  color: string | null;
-  score: number;
-  homeAway: string;
-  record: string | null;
-  rank: number | null;
-  kaggleId: number | null;
-  elo: number | null;
-}
-
-interface Game {
-  id: string;
-  date: string;
-  venue: string | null;
-  status: string;
-  statusDetail: string;
-  clock: string | null;
-  period: number | null;
-  broadcast: string | null;
-  away: TeamScore;
-  home: TeamScore;
-  gameType: "regular" | "conf_tourney" | "tourney" | null;
-  headline: string | null;
-  winProb: { away: number; home: number } | null;
-  lockedPrediction: {
-    probAway: number;
-    probHome: number;
-    source: string;
-    explanation: string | null;
-    lockedAt: string | null;
-    resolved: boolean;
-    correct: boolean | null;
-  } | null;
 }
 
 interface BracketStatus {
@@ -89,55 +51,20 @@ interface RankedTeam {
 
 // ---------- Helpers ----------
 
-function dateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}${m}${day}`;
-}
-
-function todayStr(): string {
-  return dateStr(new Date());
-}
-
-function yesterdayStr(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return dateStr(d);
-}
-
-function tomorrowStr(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return dateStr(d);
-}
-
 function todayDisplay(): string {
-  return new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return displayDateLong(new Date());
 }
 
 function yesterdayDisplay(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
+  return displayDateShort(d);
 }
 
 function tomorrowDisplay(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
+  return displayDateShort(d);
 }
 
 // ---------- Game row (compact ESPN-style) ----------
@@ -177,7 +104,7 @@ function GameRow({ game, compact }: { game: Game; compact?: boolean }) {
       {game.headline && game.gameType !== "regular" && (
         <div className="mb-1.5">
           <span
-            className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
+            className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
               game.gameType === "tourney"
                 ? "bg-accent/15 text-accent"
                 : "bg-purple-500/15 text-purple-400"
@@ -205,12 +132,12 @@ function GameRow({ game, compact }: { game: Game; compact?: boolean }) {
             {team.logo ? (
               <img src={team.logo} alt="" className={`${compact ? "w-4 h-4" : "w-5 h-5"} object-contain shrink-0`} />
             ) : (
-              <div className={`${compact ? "w-4 h-4 text-[7px]" : "w-5 h-5 text-[8px]"} rounded bg-card-border flex items-center justify-center font-bold text-muted shrink-0`}>
+              <div className={`${compact ? "w-4 h-4 text-[9px]" : "w-5 h-5 text-[10px]"} rounded bg-card-border flex items-center justify-center font-bold text-muted shrink-0`}>
                 {team.abbreviation?.slice(0, 2) || "?"}
               </div>
             )}
             {team.rank && (
-              <span className="text-[10px] text-muted font-mono w-4 text-right shrink-0">
+              <span className="text-xs text-muted font-mono w-4 text-right shrink-0">
                 {team.rank}
               </span>
             )}
@@ -218,7 +145,7 @@ function GameRow({ game, compact }: { game: Game; compact?: boolean }) {
               {team.abbreviation || team.name}
             </span>
             {isFav && !isFinal && (
-              <span className="text-[9px] text-accent font-medium shrink-0">
+              <span className="text-xs text-accent font-medium shrink-0">
                 {confidence}%
               </span>
             )}
@@ -235,7 +162,7 @@ function GameRow({ game, compact }: { game: Game; compact?: boolean }) {
 
       {/* Status bar */}
       <div className={`flex items-center justify-between ${compact ? "mt-1 pt-1" : "mt-1.5 pt-1.5"} border-t border-card-border/50`}>
-        <div className="flex items-center gap-1.5 text-[10px]">
+        <div className="flex items-center gap-1.5 text-xs">
           {isLive && (
             <span className="flex items-center gap-1 text-accent font-medium">
               <Activity size={10} className="animate-pulse" />
@@ -260,7 +187,7 @@ function GameRow({ game, compact }: { game: Game; compact?: boolean }) {
         </div>
         {pred?.resolved && (
           <span
-            className={`text-[10px] font-medium ${
+            className={`text-xs font-medium ${
               pred.correct ? "text-green-400" : "text-red-400"
             }`}
           >
@@ -390,7 +317,7 @@ export default function Home() {
     <div className="min-h-screen">
       {/* Top ticker bar */}
       <div className="border-b border-card-border bg-card/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between text-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between text-sm">
           <div className="flex items-center gap-3 min-w-0">
             <span className="font-bold text-accent shrink-0">
               {genderLabel} Basketball
@@ -402,11 +329,15 @@ export default function Home() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {accuracy?.overall.accuracy && (
-              <span className="text-muted hidden sm:inline">
-                Model: <span className="text-foreground font-medium">{(accuracy.overall.accuracy * 100).toFixed(1)}%</span>
-              </span>
-            )}
+            {accuracy && (() => {
+              const ctx = gender === "W" ? accuracy.women : accuracy.men;
+              return ctx.accuracy ? (
+                <span className="text-muted hidden sm:inline">
+                  Model: <span className="text-foreground font-medium">{(ctx.accuracy * 100).toFixed(1)}%</span>
+                  <span className="text-muted ml-1">({ctx.correct}/{ctx.total})</span>
+                </span>
+              ) : null;
+            })()}
             {todayResolved > 0 && (
               <span className="text-muted">
                 Today: <span className={`font-medium ${todayCorrect / todayResolved >= 0.7 ? "text-green-400" : "text-foreground"}`}>
@@ -481,7 +412,7 @@ export default function Home() {
                     <Trophy size={14} className="text-accent" />
                     {genderLabel} Tournament
                   </h2>
-                  <Link href="/bracket" className="text-[10px] text-accent hover:underline">
+                  <Link href="/bracket" className="text-xs text-accent hover:underline">
                     Full Bracket
                   </Link>
                 </div>
@@ -589,28 +520,28 @@ export default function Home() {
                 className="flex flex-col items-center gap-1.5 p-3 bg-card border border-card-border rounded-lg hover:border-accent/30 transition-colors text-center"
               >
                 <Trophy size={18} className="text-accent" />
-                <span className="text-xs font-medium">Bracket</span>
+                <span className="text-sm font-medium">Bracket</span>
               </Link>
               <Link
                 href="/compare"
                 className="flex flex-col items-center gap-1.5 p-3 bg-card border border-card-border rounded-lg hover:border-accent/30 transition-colors text-center"
               >
                 <GitCompareArrows size={18} className="text-blue-400" />
-                <span className="text-xs font-medium">Compare</span>
+                <span className="text-sm font-medium">Compare</span>
               </Link>
               <Link
                 href="/chat"
                 className="flex flex-col items-center gap-1.5 p-3 bg-card border border-card-border rounded-lg hover:border-accent/30 transition-colors text-center"
               >
                 <MessageSquare size={18} className="text-purple-400" />
-                <span className="text-xs font-medium">Ask Agent</span>
+                <span className="text-sm font-medium">Ask Agent</span>
               </Link>
               <Link
                 href="/players"
                 className="flex flex-col items-center gap-1.5 p-3 bg-card border border-card-border rounded-lg hover:border-accent/30 transition-colors text-center"
               >
                 <Award size={18} className="text-green-400" />
-                <span className="text-xs font-medium">Players</span>
+                <span className="text-sm font-medium">Players</span>
               </Link>
             </div>
           </div>
@@ -625,7 +556,7 @@ export default function Home() {
                     <Trophy size={13} className="text-accent" />
                     {genderLabel} Tournament
                   </h2>
-                  <Link href="/bracket" className="text-[10px] text-accent hover:underline">
+                  <Link href="/bracket" className="text-xs text-accent hover:underline">
                     Bracket
                   </Link>
                 </div>
@@ -637,7 +568,7 @@ export default function Home() {
                       )}
                       <div>
                         <div className="text-sm font-bold">{bracketStatus.champion.name}</div>
-                        <div className="text-[10px] text-muted">National Champion</div>
+                        <div className="text-xs text-muted">National Champion</div>
                       </div>
                     </div>
                   ) : (
@@ -675,41 +606,56 @@ export default function Home() {
                   <Target size={13} className="text-green-400" />
                   Model Accuracy
                 </h2>
-                <Link href="/performance" className="text-[10px] text-accent hover:underline">
+                <Link href="/performance" className="text-xs text-accent hover:underline">
                   Details
                 </Link>
               </div>
               <div className="p-3 space-y-2.5">
-                {accuracy ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted">Overall</span>
-                      <span className="text-base font-bold text-accent">
-                        {accuracy.overall.accuracy
-                          ? `${(accuracy.overall.accuracy * 100).toFixed(1)}%`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-white/[0.02] rounded-lg p-2 text-center">
-                        <div className="text-base font-bold text-blue-400">
-                          {accuracy.men.accuracy
-                            ? `${(accuracy.men.accuracy * 100).toFixed(1)}%`
-                            : "—"}
+                {accuracy ? (() => {
+                  const current = gender === "W" ? accuracy.women : accuracy.men;
+                  const other = gender === "W" ? accuracy.men : accuracy.women;
+                  const currentLabel = gender === "W" ? "Women's" : "Men's";
+                  const otherLabel = gender === "W" ? "Men's" : "Women's";
+                  const currentColor = gender === "W" ? "text-pink-400" : "text-blue-400";
+                  const otherColor = gender === "W" ? "text-blue-400" : "text-pink-400";
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm font-medium">{currentLabel}</span>
+                          <span className="text-xs text-muted ml-1.5">{current.correct}/{current.total} games</span>
                         </div>
-                        <div className="text-[10px] text-muted">Men&apos;s ({accuracy.men.total})</div>
-                      </div>
-                      <div className="bg-white/[0.02] rounded-lg p-2 text-center">
-                        <div className="text-base font-bold text-pink-400">
-                          {accuracy.women.accuracy
-                            ? `${(accuracy.women.accuracy * 100).toFixed(1)}%`
+                        <span className={`text-lg font-bold ${currentColor}`}>
+                          {current.accuracy
+                            ? `${(current.accuracy * 100).toFixed(1)}%`
                             : "—"}
-                        </div>
-                        <div className="text-[10px] text-muted">Women&apos;s ({accuracy.women.total})</div>
+                        </span>
                       </div>
-                    </div>
-                  </>
-                ) : (
+                      <div className="flex items-center justify-between bg-white/[0.02] rounded-lg px-2.5 py-1.5">
+                        <div>
+                          <span className="text-xs text-muted">{otherLabel}</span>
+                          <span className="text-xs text-muted ml-1.5">{other.correct}/{other.total}</span>
+                        </div>
+                        <span className={`text-sm font-bold ${otherColor}`}>
+                          {other.accuracy
+                            ? `${(other.accuracy * 100).toFixed(1)}%`
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between bg-white/[0.02] rounded-lg px-2.5 py-1.5">
+                        <div>
+                          <span className="text-xs text-muted">Overall</span>
+                          <span className="text-xs text-muted ml-1.5">{accuracy.overall.correct}/{accuracy.overall.total}</span>
+                        </div>
+                        <span className="text-sm font-bold text-accent">
+                          {accuracy.overall.accuracy
+                            ? `${(accuracy.overall.accuracy * 100).toFixed(1)}%`
+                            : "—"}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })() : (
                   <div className="text-xs text-muted">Loading...</div>
                 )}
               </div>
@@ -722,7 +668,7 @@ export default function Home() {
                   <BarChart3 size={13} className="text-blue-400" />
                   Power Rankings
                 </h2>
-                <Link href="/dashboard" className="text-[10px] text-accent hover:underline">
+                <Link href="/dashboard" className="text-xs text-accent hover:underline">
                   Full Rankings
                 </Link>
               </div>
@@ -736,7 +682,7 @@ export default function Home() {
                         i < topTeams.length - 1 ? "border-b border-card-border/50" : ""
                       }`}
                     >
-                      <span className="text-[10px] font-mono text-muted w-4 text-right shrink-0">
+                      <span className="text-xs font-mono text-muted w-4 text-right shrink-0">
                         {t.rank}
                       </span>
                       {t.team.logo ? (
@@ -744,13 +690,13 @@ export default function Home() {
                       ) : (
                         <div className="w-4 h-4 rounded bg-card-border shrink-0" />
                       )}
-                      <span className="text-xs font-medium truncate flex-1">{t.team.name}</span>
+                      <span className="text-sm font-medium truncate flex-1">{t.team.name}</span>
                       {t.team.seed && (
-                        <span className="text-[8px] text-accent font-medium px-1 py-0.5 rounded bg-accent/10 shrink-0">
+                        <span className="text-[10px] text-accent font-medium px-1 py-0.5 rounded bg-accent/10 shrink-0">
                           {t.team.seed}
                         </span>
                       )}
-                      <span className="text-[10px] text-muted font-mono shrink-0">
+                      <span className="text-xs text-muted font-mono shrink-0">
                         {t.record}
                       </span>
                     </Link>

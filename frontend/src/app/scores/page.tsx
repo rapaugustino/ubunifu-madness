@@ -5,64 +5,9 @@ import { useGender } from "@/hooks/useGender";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Tv, Clock, Activity, ArrowRight, RefreshCw, Check, X, Lock } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-interface TeamScore {
-  espnId: number;
-  name: string;
-  abbreviation: string;
-  logo: string | null;
-  color: string | null;
-  score: number;
-  homeAway: string;
-  record: string | null;
-  rank: number | null;
-  kaggleId: number | null;
-  elo: number | null;
-}
-
-interface Game {
-  id: string;
-  date: string;
-  venue: string | null;
-  status: string;
-  statusDetail: string;
-  clock: string | null;
-  period: number | null;
-  broadcast: string | null;
-  away: TeamScore;
-  home: TeamScore;
-  gameType: "regular" | "conf_tourney" | "tourney" | null;
-  headline: string | null;
-  winProb: { away: number; home: number } | null;
-  lockedPrediction: {
-    probAway: number;
-    probHome: number;
-    source: string;
-    explanation: string | null;
-    lockedAt: string | null;
-    resolved: boolean;
-    correct: boolean | null;
-  } | null;
-}
-
-function formatDate(d: Date): string {
-  // Use local date parts to avoid UTC timezone shift
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}${m}${day}`;
-}
-
-function displayDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { API_URL } from "@/lib/api";
+import type { Game, TeamScore } from "@/lib/types";
+import { toDateStr as formatDate, displayDateFull as displayDate } from "@/lib/date-utils";
 
 function GameCard({ game }: { game: Game }) {
   const router = useRouter();
@@ -128,7 +73,7 @@ function GameCard({ game }: { game: Game }) {
       {/* Tournament headline */}
       {game.headline && game.gameType !== "regular" && (
         <div className="mb-2">
-          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
             game.gameType === "tourney"
               ? "bg-accent/15 text-accent"
               : "bg-purple-500/15 text-purple-400"
@@ -147,7 +92,7 @@ function GameCard({ game }: { game: Game }) {
       {/* TBD matchup notice */}
       {!game.winProb && hasTBD && (
         <div className="mt-3 pt-3 border-t border-card-border">
-          <div className="text-center text-[10px] text-muted">
+          <div className="text-center text-xs text-muted">
             Waiting for matchup — prediction available once both teams are set
           </div>
         </div>
@@ -166,15 +111,15 @@ function GameCard({ game }: { game: Game }) {
             <div className="flex items-center justify-between text-xs text-muted mb-1">
               <span>{game.away.abbreviation} {(game.winProb.away * 100).toFixed(0)}%</span>
               {isFinal && modelCorrect !== null ? (
-                <span className={`flex items-center gap-1 text-[10px] font-medium ${modelCorrect ? "text-green-400" : "text-red-400"}`}>
+                <span className={`flex items-center gap-1 text-xs font-medium ${modelCorrect ? "text-green-400" : "text-red-400"}`}>
                   {modelCorrect ? <Check size={10} /> : <X size={10} />}
                   {modelCorrect ? "MODEL CORRECT" : "MODEL MISSED"}
                   {isTossup && <span className="text-yellow-400/80 ml-1">(TOSSUP)</span>}
                 </span>
               ) : isTossup && !isFinal ? (
-                <span className="text-[10px] text-yellow-400/80 font-medium">TOSSUP</span>
+                <span className="text-xs text-yellow-400/80 font-medium">TOSSUP</span>
               ) : (
-                <span className="flex items-center gap-1 text-[10px]">
+                <span className="flex items-center gap-1 text-xs">
                   <Lock size={8} className="text-muted/50" />
                   LOCKED PREDICTION
                 </span>
@@ -198,7 +143,7 @@ function GameCard({ game }: { game: Game }) {
               />
             </div>
             {game.lockedPrediction?.explanation && (
-              <p className="text-[10px] text-muted mt-1">{game.lockedPrediction.explanation}</p>
+              <p className="text-xs text-muted mt-1">{game.lockedPrediction.explanation}</p>
             )}
           </div>
         );
@@ -210,7 +155,7 @@ function GameCard({ game }: { game: Game }) {
           <Link
             href={compareHref}
             onClick={(e) => e.stopPropagation()}
-            className="text-[10px] text-muted hover:text-accent transition-colors flex items-center gap-1"
+            className="text-xs text-muted hover:text-accent transition-colors flex items-center gap-1"
           >
             <ArrowRight size={10} />
             Compare Teams
@@ -260,7 +205,7 @@ function TeamRow({
               {team.name}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-muted">
+          <div className="flex items-center gap-2 text-xs text-muted">
             {team.record && <span>{team.record}</span>}
             {team.elo && <span>Elo {team.elo.toFixed(0)}</span>}
           </div>

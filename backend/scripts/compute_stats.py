@@ -27,6 +27,7 @@ from app.models import (
     Team, EloRating, ConferenceStrength, TeamSeasonStats,
     TeamConference,
 )
+from app.elo_config import K_FACTOR, HOME_ADV, SEASON_REGRESSION, MEAN_ELO
 from app.services.advanced_stats import compute_advanced_stats
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "raw"
@@ -37,12 +38,6 @@ def r(val, digits=2):
     if val is None or (isinstance(val, float) and np.isnan(val)):
         return None
     return float(round(val, digits))
-
-# Elo config (V5 Optuna tuning)
-K_FACTOR = 19.6
-HOME_ADV = 90.9
-SEASON_REGRESSION = 0.950
-MEAN_ELO = 1500
 
 TARGET_SEASON = 2026
 

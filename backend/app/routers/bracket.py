@@ -13,6 +13,7 @@ from app.models import (
 from app.models.game_prediction import GamePrediction
 from app.models.official_bracket import OfficialBracket
 from app.services.predictor import predict_matchup
+from app.utils.team_helpers import build_team_dict_from_maps, batch_load_team_data
 
 router = APIRouter(tags=["bracket"])
 
@@ -40,23 +41,7 @@ ROUND_NAMES = ["Round of 64", "Round of 32", "Sweet 16", "Elite 8"]
 
 def _team_dict(team, elo_map, seed_map, conf_map, stats_map):
     """Build team dict using pre-loaded maps (avoids N+1 queries)."""
-    elo_val = elo_map.get(team.id)
-    seed_num = seed_map.get(team.id)
-    conf = conf_map.get(team.id)
-    stats = stats_map.get(team.id)
-    record = f"{stats.wins}-{stats.losses}" if stats else None
-    return {
-        "id": team.id,
-        "name": team.name,
-        "gender": team.gender,
-        "seed": seed_num,
-        "conference": conf,
-        "elo": round(elo_val, 1) if elo_val else None,
-        "record": record,
-        "winPct": round(stats.win_pct, 3) if stats else None,
-        "logo": team.logo_url,
-        "color": team.color,
-    }
+    return build_team_dict_from_maps(team, elo_map, seed_map, conf_map, stats_map)
 
 
 def _get_pred_from_cache(pred_cache, t1_id, t2_id):
@@ -82,47 +67,8 @@ def _build_result(result_lookup, team_a_id, team_b_id):
 
 
 def _batch_load_maps(db, season, team_ids, stats_season=None):
-    """Pre-load all related data for a set of team IDs.
-
-    stats_season: if provided, load stats/conf/elo from this season instead
-    (useful when bracket is from an older season but we want current records).
-    """
-    data_season = stats_season or season
-    elo_map = {
-        r.team_id: r.elo
-        for r in db.query(EloRating)
-        .filter(EloRating.season == data_season, EloRating.team_id.in_(team_ids))
-        .all()
-    }
-    seed_map = {
-        r.team_id: r.seed_number
-        for r in db.query(TourneySeed)
-        .filter(TourneySeed.season == season, TourneySeed.team_id.in_(team_ids))
-        .all()
-    }
-    # Full conference names
-    conf_names = {r.abbrev: r.description for r in db.query(Conference).all()}
-    conf_map = {
-        r.team_id: conf_names.get(r.conf_abbrev, r.conf_abbrev)
-        for r in db.query(TeamConference)
-        .filter(TeamConference.season == data_season, TeamConference.team_id.in_(team_ids))
-        .all()
-    }
-    stats_map = {
-        r.team_id: r
-        for r in db.query(TeamSeasonStats)
-        .filter(TeamSeasonStats.season == data_season, TeamSeasonStats.team_id.in_(team_ids))
-        .all()
-    }
-    # Fallback: if stats_map is empty and data_season != season, try the bracket season
-    if not stats_map and data_season != season:
-        stats_map = {
-            r.team_id: r
-            for r in db.query(TeamSeasonStats)
-            .filter(TeamSeasonStats.season == season, TeamSeasonStats.team_id.in_(team_ids))
-            .all()
-        }
-    return elo_map, seed_map, conf_map, stats_map
+    """Pre-load all related data for a set of team IDs."""
+    return batch_load_team_data(db, season, team_ids, stats_season)
 
 
 @router.get("/bracket/full")

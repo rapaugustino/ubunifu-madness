@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import (
     Team, EloRating, TourneySeed, TeamConference,
-    TeamSeasonStats, Prediction, ConferenceStrength, Conference,
+    TeamSeasonStats, Prediction, Conference,
 )
 from app.services.predictor import explain_matchup
 from app.services.style_analysis import analyze_style_matchup
+from app.utils.team_helpers import build_team_dict, build_stats_dict, build_conf_context
 
 router = APIRouter(tags=["compare"])
 
@@ -22,78 +23,21 @@ def _load_team_detail(db: Session, team_id: int, season: int):
     conf = db.query(TeamConference).filter(TeamConference.season == season, TeamConference.team_id == team_id).first()
     stats = db.query(TeamSeasonStats).filter(TeamSeasonStats.season == season, TeamSeasonStats.team_id == team_id).first()
 
-    record = f"{stats.wins}-{stats.losses}" if stats else None
-
     # Full conference name
     conf_name = None
     if conf:
         conf_desc = db.query(Conference).filter(Conference.abbrev == conf.conf_abbrev).first()
         conf_name = conf_desc.description if conf_desc else conf.conf_abbrev
 
-    base = {
-        "id": team.id,
-        "name": team.name,
-        "gender": team.gender,
-        "seed": seed.seed_number if seed else None,
-        "conference": conf_name,
-        "elo": round(elo.elo, 1) if elo else None,
-        "record": record,
-        "winPct": round(stats.win_pct, 3) if stats else None,
-        "logo": team.logo_url,
-        "color": team.color,
-    }
+    base = build_team_dict(
+        team,
+        elo.elo if elo else None,
+        seed.seed_number if seed else None,
+        conf_name,
+        stats,
+    )
 
-    stats_dict = None
-    if stats:
-        stats_dict = {
-            "offEfficiency": stats.avg_off_eff,
-            "defEfficiency": stats.avg_def_eff,
-            "tempo": stats.avg_tempo,
-            "efgPct": stats.avg_efg_pct,
-            "toPct": stats.avg_to_pct,
-            "orPct": stats.avg_or_pct,
-            "ftRate": stats.avg_ft_rate,
-            "oppEfgPct": stats.avg_opp_efg_pct,
-            "oppToPct": stats.avg_opp_to_pct,
-            "sos": stats.sos,
-            "masseyRank": stats.massey_avg_rank,
-            "momentum": {
-                "lastNWinPct": stats.last_n_winpct,
-                "lastNMov": stats.last_n_mov,
-                "efgTrend": stats.efg_trend,
-            },
-            "coach": {
-                "name": stats.coach_name,
-                "tenure": stats.coach_tenure,
-                "tourneyAppearances": stats.coach_tourney_appearances,
-                "marchWinrate": stats.coach_march_winrate,
-            },
-        }
-
-    conf_context = None
-    if conf:
-        cs = (
-            db.query(ConferenceStrength)
-            .filter(
-                ConferenceStrength.season == season,
-                ConferenceStrength.gender == team.gender,
-                ConferenceStrength.conf_abbrev == conf.conf_abbrev,
-            )
-            .first()
-        )
-        conf_desc = db.query(Conference).filter(Conference.abbrev == conf.conf_abbrev).first()
-        if cs:
-            conf_context = {
-                "confAbbrev": conf.conf_abbrev,
-                "confName": conf_desc.description if conf_desc else conf.conf_abbrev,
-                "avgElo": cs.avg_elo,
-                "depth": cs.elo_depth,
-                "top5Elo": cs.top5_elo,
-                "ncWinrate": cs.nc_winrate,
-                "tourneyHistWinrate": cs.tourney_hist_winrate,
-            }
-
-    return {**base, "stats": stats_dict, "conferenceContext": conf_context}
+    return {**base, "stats": build_stats_dict(stats), "conferenceContext": build_conf_context(db, team, conf, season)}
 
 
 @router.get("/compare/{team_a_id}/{team_b_id}")

@@ -61,7 +61,7 @@ export const BRACKET_MODES: { key: BracketMode; label: string; description: stri
   { key: "actual", label: "Actual", description: "Real tournament results" },
 ];
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export { API_URL } from "@/lib/api";
 
 export function picksKey(season: number, gender: string) {
   return `bracket_picks_${season}_${gender}`;

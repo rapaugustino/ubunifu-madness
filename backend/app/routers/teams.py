@@ -4,34 +4,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import Team, TeamConference, TourneySeed, EloRating, TeamSeasonStats, ConferenceStrength, Conference
 from app.schemas.team import TeamDetail, TeamListResponse
+from app.utils.team_helpers import build_team_dict, build_stats_dict, build_conf_context
 
 router = APIRouter(tags=["teams"])
-
-
-def _build_team_base(
-    team: Team,
-    elo_val: float | None,
-    seed_num: int | None,
-    conf: str | None,
-    stats: TeamSeasonStats | None,
-) -> dict:
-    record = None
-    win_pct = None
-    if stats:
-        record = f"{stats.wins}-{stats.losses}"
-        win_pct = stats.win_pct
-    return {
-        "id": team.id,
-        "name": team.name,
-        "gender": team.gender,
-        "seed": seed_num,
-        "conference": conf,
-        "elo": round(elo_val, 1) if elo_val else None,
-        "record": record,
-        "winPct": round(win_pct, 3) if win_pct else None,
-        "logo": team.logo_url,
-        "color": team.color,
-    }
 
 
 @router.get("/teams", response_model=TeamListResponse)
@@ -95,7 +70,7 @@ def list_teams(
     result = []
     for t in teams_db:
         result.append(
-            _build_team_base(
+            build_team_dict(
                 t,
                 elo_map.get(t.id),
                 seed_map.get(t.id),
@@ -142,7 +117,7 @@ def get_team(team_id: int, season: int = 2026, db: Session = Depends(get_db)):
         conf_desc = db.query(Conference).filter(Conference.abbrev == conf_row.conf_abbrev).first()
         conf_name = conf_desc.description if conf_desc else conf_row.conf_abbrev
 
-    base = _build_team_base(
+    base = build_team_dict(
         team,
         elo_row.elo if elo_row else None,
         seed_row.seed_number if seed_row else None,
@@ -150,57 +125,7 @@ def get_team(team_id: int, season: int = 2026, db: Session = Depends(get_db)):
         stats_row,
     )
 
-    stats_dict = None
-    if stats_row:
-        stats_dict = {
-            "offEfficiency": stats_row.avg_off_eff,
-            "defEfficiency": stats_row.avg_def_eff,
-            "tempo": stats_row.avg_tempo,
-            "efgPct": stats_row.avg_efg_pct,
-            "toPct": stats_row.avg_to_pct,
-            "orPct": stats_row.avg_or_pct,
-            "ftRate": stats_row.avg_ft_rate,
-            "oppEfgPct": stats_row.avg_opp_efg_pct,
-            "oppToPct": stats_row.avg_opp_to_pct,
-            "masseyRank": stats_row.massey_avg_rank,
-            "momentum": {
-                "lastNWinPct": stats_row.last_n_winpct,
-                "lastNMov": stats_row.last_n_mov,
-                "efgTrend": stats_row.efg_trend,
-            },
-            "coach": {
-                "name": stats_row.coach_name,
-                "tenure": stats_row.coach_tenure,
-                "tourneyAppearances": stats_row.coach_tourney_appearances,
-                "marchWinrate": stats_row.coach_march_winrate,
-            },
-        }
-
-    conf_context = None
-    if conf_row:
-        cs = (
-            db.query(ConferenceStrength)
-            .filter(
-                ConferenceStrength.season == season,
-                ConferenceStrength.gender == team.gender,
-                ConferenceStrength.conf_abbrev == conf_row.conf_abbrev,
-            )
-            .first()
-        )
-        conf_desc = (
-            db.query(Conference)
-            .filter(Conference.abbrev == conf_row.conf_abbrev)
-            .first()
-        )
-        if cs:
-            conf_context = {
-                "confAbbrev": conf_row.conf_abbrev,
-                "confName": conf_desc.description if conf_desc else conf_row.conf_abbrev,
-                "avgElo": cs.avg_elo,
-                "depth": cs.elo_depth,
-                "top5Elo": cs.top5_elo,
-                "ncWinrate": cs.nc_winrate,
-                "tourneyHistWinrate": cs.tourney_hist_winrate,
-            }
+    stats_dict = build_stats_dict(stats_row)
+    conf_context = build_conf_context(db, team, conf_row, season)
 
     return {**base, "stats": stats_dict, "conferenceContext": conf_context}

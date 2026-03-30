@@ -6,8 +6,7 @@ import { useSearchParams } from "next/navigation";
 import WinProbBar from "@/components/WinProbBar";
 import { ArrowLeftRight, Sparkles } from "lucide-react";
 import { MetricLabel, METRIC_TOOLTIPS } from "@/components/Tooltip";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/api";
 
 interface Team {
   id: number;
@@ -397,7 +396,7 @@ function CompareContent() {
                       {style.traits.map((trait) => (
                         <span
                           key={trait}
-                          className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                          className={`text-xs px-2 py-0.5 rounded-full border ${
                             idx === 0
                               ? "bg-accent/5 border-accent/15 text-accent"
                               : "bg-blue-500/5 border-blue-500/15 text-blue-400"
@@ -492,11 +491,11 @@ function CompareContent() {
                           {m.winnerScore}-{m.loserScore}
                         </span>
                         {m.numOt > 0 && (
-                          <span className="text-[10px] text-yellow-400/70">
+                          <span className="text-xs text-yellow-400/70">
                             {m.numOt}OT
                           </span>
                         )}
-                        <span className="text-[10px] text-muted capitalize w-14 text-right">
+                        <span className="text-xs text-muted capitalize w-14 text-right">
                           {m.gameType === "tourney" ? "NCAA" : m.winnerLoc}
                         </span>
                       </div>

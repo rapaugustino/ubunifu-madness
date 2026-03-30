@@ -29,12 +29,9 @@ from app.models import (
     Team, EloRating, GameResult, TeamSeasonStats,
     TeamConference, ConferenceStrength,
 )
+from app.elo_config import K_FACTOR, HOME_ADV, MEAN_ELO
 from app.services import espn
 
-# Elo config — must match compute_stats.py exactly
-K_FACTOR = 21.8
-HOME_ADV = 101.9
-MEAN_ELO = 1500
 SEASON = 2026
 
 
