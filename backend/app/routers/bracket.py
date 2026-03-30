@@ -250,7 +250,7 @@ def full_bracket(
                         if t:
                             team_by_id[tid] = t
 
-    is_complete = len(tourney_games) >= 63  # Full tournament = 63 games (67 with play-in)
+    # total_games_played will be computed from the bracket structure below
 
     def make_team_dict(tid):
         team = team_by_id.get(tid)
@@ -416,11 +416,45 @@ def full_bracket(
         else:
             championship.append(None)
 
+    is_complete = champion is not None
+
+    # Count games played from the bracket structure itself
+    total_games_played = sum(1 for ff in first_four if ff and ff.get("result"))
+    for region_data in regions.values():
+        for rnd in region_data["rounds"]:
+            total_games_played += sum(1 for m in rnd if m and m.get("result"))
+    total_games_played += sum(1 for m in final_four if m and m.get("result"))
+    total_games_played += sum(1 for m in championship if m and m.get("result"))
+
+    # Determine current round based on games played
+    # Thresholds: First Four (4), R64 (+32=36), R32 (+16=52), S16 (+8=60), E8 (+4=64), FF (+2=66), Champ (+1=67)
+    # "Current round" = the round being played or about to be played
+    if total_games_played == 0:
+        current_round = "Pre-Tournament"
+    elif total_games_played < 4:
+        current_round = "First Four"
+    elif total_games_played < 36:
+        current_round = "Round of 64"
+    elif total_games_played < 52:
+        current_round = "Round of 32"
+    elif total_games_played < 60:
+        current_round = "Sweet 16"
+    elif total_games_played < 64:
+        current_round = "Elite 8"
+    elif total_games_played < 66:
+        current_round = "Final Four"
+    elif total_games_played < 67:
+        current_round = "Championship"
+    else:
+        current_round = "Complete"
+
     return {
         "season": actual_season,
         "gender": gender,
         "hasBracket": True,
         "isComplete": is_complete,
+        "currentRound": current_round,
+        "totalGamesPlayed": total_games_played,
         "firstFour": first_four,
         "regions": regions,
         "finalFour": final_four,

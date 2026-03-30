@@ -49,6 +49,8 @@ interface BracketData {
   gender: string;
   hasBracket: boolean;
   isComplete: boolean;
+  currentRound: string;
+  totalGamesPlayed: number;
   firstFour: FirstFourMatchup[];
   regions: Record<string, RegionData>;
   finalFour: (Matchup | null)[];
@@ -70,6 +72,8 @@ function TeamSlot({
   canPick,
   onClick,
   score,
+  isEliminated,
+  isCorrectPick,
 }: {
   team: BracketTeam | null;
   isWinner: boolean;
@@ -77,6 +81,8 @@ function TeamSlot({
   canPick: boolean;
   onClick?: () => void;
   score?: number | null;
+  isEliminated?: boolean;
+  isCorrectPick?: boolean;
 }) {
   if (!team) {
     return (
@@ -91,7 +97,11 @@ function TeamSlot({
       onClick={canPick ? onClick : undefined}
       disabled={!canPick}
       className={`flex items-center gap-2 px-2 py-1.5 rounded text-left w-full min-h-[32px] transition-all ${
-        isPicked
+        isEliminated
+          ? "bg-red-500/10 border border-red-500/30 border-l-2 border-l-red-500/60"
+          : isCorrectPick
+          ? "bg-green-500/15 border border-green-500/30 border-l-2 border-l-green-500/60"
+          : isPicked
           ? "bg-accent/15 border border-accent/30"
           : isWinner
           ? "bg-green-500/10 border border-green-500/20"
@@ -101,7 +111,7 @@ function TeamSlot({
       }`}
     >
       {team.logo ? (
-        <img src={team.logo} alt="" className="w-4 h-4 object-contain shrink-0" />
+        <img src={team.logo} alt="" className={`w-4 h-4 object-contain shrink-0 ${isEliminated ? "grayscale" : ""}`} />
       ) : (
         <div className="w-4 h-4 rounded bg-white/10 shrink-0" />
       )}
@@ -109,16 +119,22 @@ function TeamSlot({
         {team.seed && (
           <span className="text-[10px] text-muted font-mono shrink-0">{team.seed}</span>
         )}
-        <span className={`text-xs truncate ${isWinner || isPicked ? "font-semibold" : ""}`}>
+        <span className={`text-xs truncate ${isEliminated ? "line-through text-red-400/60" : isWinner || isPicked ? "font-semibold" : ""}`}>
           {team.name}
         </span>
       </div>
       {score != null && (
-        <span className={`text-xs font-mono shrink-0 ${isWinner ? "font-bold text-green-400" : "text-muted"}`}>
+        <span className={`text-xs font-mono shrink-0 ${isWinner ? "font-bold text-green-400" : isEliminated ? "text-red-400/60" : "text-muted"}`}>
           {score}
         </span>
       )}
-      {isWinner && score != null && (
+      {isEliminated && (
+        <span className="text-red-400 text-[10px] font-bold shrink-0">X</span>
+      )}
+      {isCorrectPick && (
+        <span className="text-green-400 text-[10px] font-bold shrink-0">&#10003;</span>
+      )}
+      {isWinner && score != null && !isEliminated && !isCorrectPick && (
         <span className="text-green-400 text-[10px] shrink-0">W</span>
       )}
     </button>
@@ -132,6 +148,7 @@ function MatchupCard({
   slotId,
   onPick,
   onAnalyze,
+  eliminatedTeams,
 }: {
   matchup: Matchup | null;
   isHistorical: boolean;
@@ -139,6 +156,7 @@ function MatchupCard({
   slotId: string;
   onPick: (slotId: string, teamId: number) => void;
   onAnalyze: (matchup: Matchup) => void;
+  eliminatedTeams?: Set<number>;
 }) {
   if (!matchup || (!matchup.teamA && !matchup.teamB)) {
     return (
@@ -153,29 +171,48 @@ function MatchupCard({
   const hasResult = result != null;
   const aIsWinner = hasResult && teamA != null && result.winnerId === teamA.id;
   const bIsWinner = hasResult && teamB != null && result.winnerId === teamB.id;
-  const canPick = !isHistorical;
+  const canPick = !isHistorical && !hasResult;
+  const aEliminated = eliminatedTeams && teamA?.id ? eliminatedTeams.has(teamA.id) : false;
+  const bEliminated = eliminatedTeams && teamB?.id ? eliminatedTeams.has(teamB.id) : false;
+
+  // Wrong pick: the official bracket picked this team for this slot but the team lost
+  const wrongPickA = hasResult && eliminatedTeams && userPick === teamA?.id && !aIsWinner;
+  const wrongPickB = hasResult && eliminatedTeams && userPick === teamB?.id && !bIsWinner;
+  // Correct pick: the official bracket picked this team and it won
+  const correctPickA = hasResult && eliminatedTeams && userPick === teamA?.id && aIsWinner;
+  const correctPickB = hasResult && eliminatedTeams && userPick === teamB?.id && bIsWinner;
 
   return (
-    <div className="p-2 rounded-lg bg-card border border-card-border space-y-1 group relative">
+    <div className={`p-2 rounded-lg bg-card border space-y-1 group relative ${
+      wrongPickA || wrongPickB ? "border-red-500/20" :
+      aEliminated && bEliminated ? "border-red-500/20" : "border-card-border"
+    }`}>
       <TeamSlot
         team={teamA}
         isWinner={aIsWinner}
-        isPicked={teamA != null && userPick === teamA.id}
+        isPicked={teamA != null && userPick === teamA.id && !wrongPickA}
         canPick={canPick && teamA != null && teamA.id != null}
         onClick={teamA?.id ? () => onPick(slotId, teamA.id) : undefined}
         score={hasResult ? (aIsWinner ? result.winnerScore : result.loserScore) : null}
+        isEliminated={(aEliminated && !hasResult) || !!wrongPickA}
+        isCorrectPick={!!correctPickA}
       />
       <TeamSlot
         team={teamB}
         isWinner={bIsWinner}
-        isPicked={teamB != null && userPick === teamB.id}
+        isPicked={teamB != null && userPick === teamB.id && !wrongPickB}
         canPick={canPick && teamB != null && teamB.id != null}
         onClick={teamB?.id ? () => onPick(slotId, teamB.id) : undefined}
         score={hasResult ? (bIsWinner ? result.winnerScore : result.loserScore) : null}
+        isEliminated={(bEliminated && !hasResult) || !!wrongPickB}
+        isCorrectPick={!!correctPickB}
       />
-      {/* Win prob indicator */}
+      {/* Win prob indicator: orange = top team, blue = bottom team */}
       <div className="flex items-center gap-1 px-1">
-        <div className="flex-1 h-0.5 bg-white/5 rounded-full overflow-hidden flex">
+        <div
+          className="flex-1 h-0.5 bg-white/5 rounded-full overflow-hidden flex"
+          title={`${teamA?.name ?? "Team A"}: ${(winProbA * 100).toFixed(0)}% — ${teamB?.name ?? "Team B"}: ${((1 - winProbA) * 100).toFixed(0)}%`}
+        >
           <div className="h-full bg-accent/50 rounded-l-full" style={{ width: `${winProbA * 100}%` }} />
           <div className="h-full bg-blue-500/30 rounded-r-full" style={{ width: `${(1 - winProbA) * 100}%` }} />
         </div>
@@ -206,7 +243,10 @@ function AnalysisPanel({
 
     const teamA = matchup.teamA;
     const teamB = matchup.teamB;
-    const prompt = `Analyze this March Madness matchup: #${teamA.seed} ${teamA.name} (${teamA.record}, Elo ${teamA.elo}, ${teamA.conference}) vs #${teamB.seed} ${teamB.name} (${teamB.record}, Elo ${teamB.elo}, ${teamB.conference}). Our model gives ${teamA.name} a ${(matchup.winProbA * 100).toFixed(0)}% win probability. Give a brief analysis (3-4 sentences) covering key factors, upset potential, and your pick.`;
+    const hasResult = matchup.result != null;
+    const prompt = hasResult
+      ? `Analyze this completed March Madness matchup: #${teamA.seed} ${teamA.name} (${teamA.record}, Elo ${teamA.elo}, ${teamA.conference}) vs #${teamB.seed} ${teamB.name} (${teamB.record}, Elo ${teamB.elo}, ${teamB.conference}). Our model gave ${teamA.name} a ${(matchup.winProbA * 100).toFixed(0)}% win probability. The winner was ${matchup.result!.winnerId === teamA.id ? teamA.name : teamB.name} (${matchup.result!.winnerScore}-${matchup.result!.loserScore}). Give a brief post-game analysis (3-4 sentences) covering what happened and whether the result was expected.`
+      : `Analyze this upcoming March Madness matchup: #${teamA.seed} ${teamA.name} (${teamA.record}, Elo ${teamA.elo}, ${teamA.conference}) vs #${teamB.seed} ${teamB.name} (${teamB.record}, Elo ${teamB.elo}, ${teamB.conference}). Our model gives ${teamA.name} a ${(matchup.winProbA * 100).toFixed(0)}% win probability. Give a brief preview (3-4 sentences) covering key factors, upset potential, and which team has the edge.`;
 
     setLoading(true);
     setAnalysis("");
@@ -442,13 +482,255 @@ function CopyFromMenu({
   );
 }
 
-type BracketMode = "my_bracket" | "model" | "agent" | "consensus";
+// Compact matchup for full bracket view
+function MiniSlot({
+  team,
+  isWinner,
+  isEliminated,
+  isCorrectPick,
+  score,
+}: {
+  team: BracketTeam | null;
+  isWinner: boolean;
+  isEliminated?: boolean;
+  isCorrectPick?: boolean;
+  score?: number | null;
+}) {
+  if (!team) {
+    return (
+      <div className="flex items-center gap-1 px-1 py-0.5 min-h-[20px]">
+        <span className="text-[9px] text-muted">TBD</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={`flex items-center gap-1 px-1 py-0.5 min-h-[20px] rounded-sm ${
+        isEliminated
+          ? "bg-red-500/10"
+          : isCorrectPick
+          ? "bg-green-500/15"
+          : isWinner
+          ? "bg-green-500/10"
+          : ""
+      }`}
+    >
+      {team.logo && (
+        <img src={team.logo} alt="" className={`w-3 h-3 object-contain shrink-0 ${isEliminated ? "grayscale" : ""}`} />
+      )}
+      <span className="text-[9px] text-muted font-mono shrink-0">{team.seed}</span>
+      <span
+        className={`text-[10px] truncate max-w-[60px] ${
+          isEliminated ? "line-through text-red-400/60" : isWinner ? "font-semibold" : ""
+        }`}
+      >
+        {team.name}
+      </span>
+      {score != null && (
+        <span className={`text-[9px] font-mono ml-auto shrink-0 ${isWinner ? "text-green-400" : "text-muted"}`}>
+          {score}
+        </span>
+      )}
+      {isEliminated && <span className="text-red-400 text-[8px] font-bold shrink-0 ml-auto">X</span>}
+      {isCorrectPick && <span className="text-green-400 text-[8px] font-bold shrink-0 ml-auto">&#10003;</span>}
+    </div>
+  );
+}
+
+function MiniMatchupCard({
+  matchup,
+  picks,
+  slotId,
+  eliminatedTeams,
+  reverse,
+}: {
+  matchup: Matchup | null;
+  picks: Record<string, number>;
+  slotId: string;
+  eliminatedTeams?: Set<number>;
+  reverse?: boolean;
+}) {
+  if (!matchup || (!matchup.teamA && !matchup.teamB)) {
+    return (
+      <div className="rounded bg-card/50 border border-card-border border-dashed min-h-[42px] flex items-center justify-center">
+        <span className="text-[9px] text-muted">TBD</span>
+      </div>
+    );
+  }
+  const { teamA, teamB, result } = matchup;
+  const userPick = picks[slotId];
+  const hasResult = result != null;
+  const aIsWinner = hasResult && teamA != null && result.winnerId === teamA.id;
+  const bIsWinner = hasResult && teamB != null && result.winnerId === teamB.id;
+  const wrongPickA = hasResult && eliminatedTeams && userPick === teamA?.id && !aIsWinner;
+  const wrongPickB = hasResult && eliminatedTeams && userPick === teamB?.id && !bIsWinner;
+  const correctPickA = hasResult && eliminatedTeams && userPick === teamA?.id && aIsWinner;
+  const correctPickB = hasResult && eliminatedTeams && userPick === teamB?.id && bIsWinner;
+  const aEliminated = eliminatedTeams && teamA?.id ? eliminatedTeams.has(teamA.id) : false;
+  const bEliminated = eliminatedTeams && teamB?.id ? eliminatedTeams.has(teamB.id) : false;
+
+  const slotA = (
+    <MiniSlot
+      team={teamA}
+      isWinner={aIsWinner}
+      isEliminated={(aEliminated && !hasResult) || !!wrongPickA}
+      isCorrectPick={!!correctPickA}
+      score={hasResult ? (aIsWinner ? result.winnerScore : result.loserScore) : null}
+    />
+  );
+  const slotB = (
+    <MiniSlot
+      team={teamB}
+      isWinner={bIsWinner}
+      isEliminated={(bEliminated && !hasResult) || !!wrongPickB}
+      isCorrectPick={!!correctPickB}
+      score={hasResult ? (bIsWinner ? result.winnerScore : result.loserScore) : null}
+    />
+  );
+
+  return (
+    <div className={`rounded bg-card border border-card-border overflow-hidden ${
+      wrongPickA || wrongPickB ? "border-red-500/20" : ""
+    }`}>
+      {reverse ? <>{slotB}{slotA}</> : <>{slotA}{slotB}</>}
+    </div>
+  );
+}
+
+function FullBracketView({
+  bracket,
+  displayPicks,
+  eliminatedTeams,
+  isOfficialMode,
+  getMatchup,
+}: {
+  bracket: BracketData;
+  displayPicks: Record<string, number>;
+  eliminatedTeams: Set<number>;
+  isOfficialMode: boolean;
+  getMatchup: (m: Matchup | null, slotId: string) => Matchup | null;
+}) {
+  const regionNames = Object.keys(bracket.regions);
+  const pairings = bracket.ffPairings;
+  // Top pair: pairings[0] = [left-top, right-top], Bottom pair: pairings[1] = [left-bottom, right-bottom]
+  const topLeft = pairings[0]?.[0] ?? regionNames[0];
+  const topRight = pairings[0]?.[1] ?? regionNames[1];
+  const bottomLeft = pairings[1]?.[0] ?? regionNames[2];
+  const bottomRight = pairings[1]?.[1] ?? regionNames[3];
+
+  const elim = eliminatedTeams.size > 0 ? eliminatedTeams : undefined;
+
+  const renderRegion = (regionName: string, reverse: boolean) => {
+    const region = bracket.regions[regionName];
+    if (!region) return null;
+    const rounds = reverse ? [...region.rounds].reverse() : region.rounds;
+    const roundNames = reverse
+      ? [...bracket.roundNames].reverse()
+      : bracket.roundNames;
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] font-semibold text-accent uppercase tracking-wider mb-1.5 px-1">
+          {regionName}
+        </div>
+        <div className={`flex gap-1.5 ${reverse ? "flex-row-reverse" : ""}`}>
+          {rounds.map((round, displayIdx) => {
+            const actualRoundIdx = reverse ? region.rounds.length - 1 - displayIdx : displayIdx;
+            return (
+              <div key={displayIdx} className="flex-1 min-w-0">
+                <div className="text-[8px] text-muted uppercase tracking-wider mb-1 truncate px-0.5">
+                  {roundNames[displayIdx]?.replace("Round of ", "R")}
+                </div>
+                <div className="space-y-1" style={{ paddingTop: `${Math.pow(2, actualRoundIdx) * 4 - 4}px` }}>
+                  {round.map((matchup, i) => {
+                    const slotId = `${regionName}_r${actualRoundIdx}_${i}`;
+                    return (
+                      <div key={slotId} style={{ marginBottom: `${Math.pow(2, actualRoundIdx) * 8 - 8}px` }}>
+                        <MiniMatchupCard
+                          matchup={getMatchup(matchup, slotId)}
+                          picks={displayPicks}
+                          slotId={slotId}
+                          eliminatedTeams={elim}
+                          reverse={reverse}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[1100px]">
+        {/* Top half: topLeft → FF semifinal 1 ← topRight */}
+        <div className="flex gap-3 mb-4 items-start">
+          {renderRegion(topLeft, false)}
+          <div className="w-[140px] shrink-0 flex flex-col items-center justify-center pt-16">
+            <div className="text-[8px] text-muted uppercase tracking-wider mb-1">Semifinal 1</div>
+            <MiniMatchupCard
+              matchup={getMatchup(bracket.finalFour[0], "ff_0")}
+              picks={displayPicks}
+              slotId="ff_0"
+              eliminatedTeams={elim}
+            />
+          </div>
+          {renderRegion(topRight, true)}
+        </div>
+
+        {/* Championship in center */}
+        <div className="flex justify-center my-3">
+          <div className="w-[160px]">
+            <div className="text-[9px] text-accent uppercase tracking-wider font-semibold mb-1 text-center">
+              Championship
+            </div>
+            <MiniMatchupCard
+              matchup={getMatchup(bracket.championship[0], "champ_0")}
+              picks={displayPicks}
+              slotId="champ_0"
+              eliminatedTeams={elim}
+            />
+            {bracket.champion && (
+              <div className="flex items-center gap-1 justify-center mt-1.5">
+                <Trophy size={10} className="text-accent" />
+                <span className="text-[10px] font-bold">{bracket.champion.name}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom half: bottomLeft → FF semifinal 2 ← bottomRight */}
+        <div className="flex gap-3 mt-4 items-start">
+          {renderRegion(bottomLeft, false)}
+          <div className="w-[140px] shrink-0 flex flex-col items-center justify-center pt-16">
+            <div className="text-[8px] text-muted uppercase tracking-wider mb-1">Semifinal 2</div>
+            <MiniMatchupCard
+              matchup={getMatchup(bracket.finalFour[1], "ff_1")}
+              picks={displayPicks}
+              slotId="ff_1"
+              eliminatedTeams={elim}
+            />
+          </div>
+          {renderRegion(bottomRight, true)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type BracketMode = "my_bracket" | "model" | "agent" | "consensus" | "actual";
 
 const BRACKET_MODES: { key: BracketMode; label: string; description: string }[] = [
   { key: "my_bracket", label: "My Bracket", description: "Fill out your own picks" },
   { key: "model", label: "Model", description: "V6 ML ensemble picks (chalk)" },
   { key: "agent", label: "Agent", description: "AI agent picks (balanced upsets)" },
   { key: "consensus", label: "Consensus", description: "Model + Agent combined" },
+  { key: "actual", label: "Actual", description: "Real tournament results" },
 ];
 
 export default function BracketPage() {
@@ -458,16 +740,10 @@ export default function BracketPage() {
   const [activeRegion, setActiveRegion] = useState("East");
   const [picks, setPicks] = useState<Record<string, number>>({});
   const [analysisMatchup, setAnalysisMatchup] = useState<Matchup | null>(null);
-  const [autoFilling, setAutoFilling] = useState(false);
   const [bracketMode, setBracketMode] = useState<BracketMode>("my_bracket");
   const [officialPicks, setOfficialPicks] = useState<Record<string, number> | null>(null);
   const [officialMeta, setOfficialMeta] = useState<Record<string, unknown> | null>(null);
   const [officialLoading, setOfficialLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [simResults, setSimResults] = useState<{
-    championProbabilities: { teamId: number; teamName: string; probability: number }[];
-    finalFourProbabilities: { teamId: number; teamName: string; probability: number }[];
-  } | null>(null);
 
   const sync = useBracketSync(
     bracket?.season ?? 0,
@@ -483,7 +759,7 @@ export default function BracketPage() {
 
   // Load official bracket when mode changes
   useEffect(() => {
-    if (bracketMode === "my_bracket") {
+    if (bracketMode === "my_bracket" || bracketMode === "actual") {
       setOfficialPicks(null);
       setOfficialMeta(null);
       return;
@@ -507,34 +783,16 @@ export default function BracketPage() {
       .finally(() => setOfficialLoading(false));
   }, [bracketMode, gender]);
 
-  const generateOfficial = async () => {
-    if (!bracket || generating) return;
-    setGenerating(true);
-    try {
-      const endpoint =
-        bracketMode === "consensus"
-          ? `${API_URL}/api/bracket/official/consensus?gender=${gender}&season=${bracket.season}`
-          : `${API_URL}/api/bracket/official/generate?gender=${gender}&bracket_type=${bracketMode}&season=${bracket.season}`;
-      const res = await fetch(endpoint, { method: "POST" });
-      const data = await res.json();
-      if (data.exists && data.picks) {
-        setOfficialPicks(data.picks);
-        setOfficialMeta(data.metadata);
-      }
-    } catch {}
-    setGenerating(false);
-  };
-
   // Which picks to display based on mode
-  const displayPicks = bracketMode === "my_bracket" ? picks : (officialPicks ?? {});
-  const isReadOnly = bracketMode !== "my_bracket" && officialPicks !== null;
+  // "actual" mode uses no picks — it just shows backend matchups with real results
+  const displayPicks = bracketMode === "my_bracket" ? picks : bracketMode === "actual" ? {} : (officialPicks ?? {});
+  const isReadOnly = bracketMode !== "my_bracket";
 
   const fetchBracket = useCallback(async () => {
     setLoading(true);
     setBracket(null);
     setPicks({});
     setLiveProbCache({});
-    setSimResults(null);
     try {
       const res = await fetch(`${API_URL}/api/bracket/full?gender=${gender}&season=0`);
       const data: BracketData = await res.json();
@@ -779,15 +1037,88 @@ export default function BracketPage() {
   }, [bracket, picks, officialPicks, bracketMode, teamLookup, liveProbCache]);
 
   // Get the effective matchup for a slot (backend data or dynamic)
+  const isOfficialMode = bracketMode !== "my_bracket" && bracketMode !== "actual";
   const getMatchup = useCallback(
     (backendMatchup: Matchup | null, slotId: string): Matchup | null => {
+      // "Actual" mode always shows real backend data — no dynamic/pick overrides
+      if (bracketMode === "actual") return backendMatchup;
+      // For official brackets (Model/Agent/Consensus), FF and Championship slots
+      // should show the locked picks, not the actual advancing teams
+      const isFfOrChamp = slotId.startsWith("ff_") || slotId.startsWith("champ_");
+      if (isFfOrChamp && isOfficialMode && dynamicMatchups[slotId]) {
+        return dynamicMatchups[slotId];
+      }
       // If backend has a full matchup with both teams, use it
       if (backendMatchup?.teamA?.id && backendMatchup?.teamB?.id) return backendMatchup;
       // Otherwise check dynamic
       return dynamicMatchups[slotId] ?? backendMatchup;
     },
-    [dynamicMatchups]
+    [dynamicMatchups, isOfficialMode, bracketMode]
   );
+
+  // Compute eliminated teams for all bracket modes (except "actual")
+  const eliminatedTeams = useMemo(() => {
+    if (!bracket || bracketMode === "actual") return new Set<number>();
+    const activePicks = bracketMode === "my_bracket" ? picks : (officialPicks ?? {});
+    const eliminated = new Set<number>();
+
+    const checkSlot = (slotId: string, matchup: Matchup | null) => {
+      if (!matchup?.result) return;
+      const pick = activePicks[slotId];
+      if (pick && pick !== matchup.result.winnerId) {
+        eliminated.add(pick);
+      }
+    };
+
+    if (bracket.firstFour) {
+      bracket.firstFour.forEach((m, i) => checkSlot(`first_four_${i}`, m));
+    }
+    for (const regionName of Object.keys(bracket.regions)) {
+      const region = bracket.regions[regionName];
+      for (let roundIdx = 0; roundIdx < region.rounds.length; roundIdx++) {
+        region.rounds[roundIdx].forEach((m, matchIdx) => {
+          checkSlot(`${regionName}_r${roundIdx}_${matchIdx}`, m);
+        });
+      }
+    }
+    bracket.finalFour.forEach((m, i) => checkSlot(`ff_${i}`, m));
+    bracket.championship.forEach((m, i) => checkSlot(`champ_${i}`, m));
+
+    return eliminated;
+  }, [bracket, picks, officialPicks, bracketMode]);
+
+  // Compute bracket score for all pick-based brackets (not "actual")
+  const bracketScore = useMemo(() => {
+    if (!bracket || bracketMode === "actual") return null;
+    const activePicks = bracketMode === "my_bracket" ? picks : (officialPicks ?? {});
+    let correct = 0;
+    let total = 0;
+
+    const checkSlot = (slotId: string, matchup: Matchup | null) => {
+      if (!matchup?.result) return;
+      const pick = activePicks[slotId];
+      if (pick) {
+        total++;
+        if (pick === matchup.result.winnerId) correct++;
+      }
+    };
+
+    if (bracket.firstFour) {
+      bracket.firstFour.forEach((m, i) => checkSlot(`first_four_${i}`, m));
+    }
+    for (const regionName of Object.keys(bracket.regions)) {
+      const region = bracket.regions[regionName];
+      for (let roundIdx = 0; roundIdx < region.rounds.length; roundIdx++) {
+        region.rounds[roundIdx].forEach((m, matchIdx) => {
+          checkSlot(`${regionName}_r${roundIdx}_${matchIdx}`, m);
+        });
+      }
+    }
+    bracket.finalFour.forEach((m, i) => checkSlot(`ff_${i}`, m));
+    bracket.championship.forEach((m, i) => checkSlot(`champ_${i}`, m));
+
+    return { correct, total };
+  }, [bracket, picks, officialPicks, bracketMode]);
 
   const handlePick = (slotId: string, teamId: number) => {
     if (!bracket) return;
@@ -815,20 +1146,6 @@ export default function BracketPage() {
     if (!bracket) return;
     setPicks({});
     localStorage.removeItem(picksKey(bracket.season, gender));
-  };
-
-  const autoFill = async () => {
-    if (!bracket) return;
-    setAutoFilling(true);
-    try {
-      const res = await fetch(
-        `${API_URL}/api/bracket/simulate?season=${bracket.season}&gender=${gender}&num_simulations=1000`,
-        { method: "POST" }
-      );
-      const data = await res.json();
-      setSimResults(data);
-    } catch {}
-    setAutoFilling(false);
   };
 
   const exportBracket = () => {
@@ -986,7 +1303,6 @@ export default function BracketPage() {
   const regionNames = Object.keys(bracket.regions);
   const currentRegion = bracket.regions[activeRegion];
   const isHistorical = bracket.isComplete;
-  const isOfficialMode = bracketMode !== "my_bracket";
   const canInteract = !isHistorical && !isReadOnly;
 
   return (
@@ -999,7 +1315,9 @@ export default function BracketPage() {
           </h1>
           <p className="text-muted text-sm mt-1">
             {isHistorical
-              ? `Completed tournament. ${bracket.champion ? `Champion: ${bracket.champion.name}` : ""}`
+              ? `Champion: ${bracket.champion?.name ?? "TBD"}`
+              : bracket.currentRound
+              ? `${bracket.currentRound} — ${bracket.totalGamesPlayed} of 67 games played`
               : isOfficialMode
               ? BRACKET_MODES.find((m) => m.key === bracketMode)?.description ?? ""
               : "Click matchups to make your picks. Probabilities powered by our ML model."}
@@ -1008,14 +1326,6 @@ export default function BracketPage() {
         <div className="flex items-center gap-2">
           {canInteract && (
             <>
-              <button
-                onClick={autoFill}
-                disabled={autoFilling}
-                className="flex items-center gap-1.5 px-3 py-2 bg-accent/10 text-accent rounded-lg text-sm font-medium hover:bg-accent/20 transition-colors disabled:opacity-50"
-              >
-                <Sparkles size={14} />
-                {autoFilling ? "Simulating..." : "Simulate"}
-              </button>
               <button
                 onClick={resetPicks}
                 className="flex items-center gap-1.5 px-3 py-2 bg-white/5 text-muted rounded-lg text-sm hover:text-foreground hover:bg-white/10 transition-colors"
@@ -1115,7 +1425,7 @@ export default function BracketPage() {
         </div>
       </div>
 
-      {/* Official bracket status banner */}
+      {/* Official bracket not generated banner */}
       {isOfficialMode && !officialLoading && !officialPicks && !isHistorical && (
         <div className="mb-6 p-4 rounded-xl bg-card border border-card-border text-center">
           <p className="text-sm text-muted">
@@ -1126,16 +1436,54 @@ export default function BracketPage() {
         </div>
       )}
 
-      {/* Official bracket locked banner */}
-      {isOfficialMode && officialPicks && (
-        <div className="mb-6 p-3 rounded-lg bg-green-500/5 border border-green-500/10 flex items-center gap-2">
-          <Check size={14} className="text-green-400 shrink-0" />
-          <span className="text-xs text-green-400">
-            {BRACKET_MODES.find((m) => m.key === bracketMode)?.label} bracket locked.
-            {officialMeta && bracketMode === "consensus" && (
-              <> Agreement: {String(officialMeta.agreement_pct)}% ({String(officialMeta.contested_slots)} contested picks).</>
+      {/* Score banner — shown for all pick-based brackets with results */}
+      {bracketMode !== "actual" && bracketScore && bracketScore.total > 0 && (
+        <div className="mb-6 p-3 rounded-lg bg-white/[0.02] border border-card-border flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {isOfficialMode && officialPicks && (
+              <>
+                <Check size={14} className="text-green-400 shrink-0" />
+                <span className="text-xs text-green-400">
+                  {BRACKET_MODES.find((m) => m.key === bracketMode)?.label} bracket locked.
+                  {officialMeta && bracketMode === "consensus" && (
+                    <> Agreement: {String(officialMeta.agreement_pct)}% ({String(officialMeta.contested_slots)} contested picks).</>
+                  )}
+                </span>
+              </>
             )}
-          </span>
+            {bracketMode === "my_bracket" && (
+              <span className="text-xs text-muted">Your picks vs actual results</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <span className={`text-sm font-bold ${
+                bracketScore.correct / bracketScore.total >= 0.7 ? "text-green-400" :
+                bracketScore.correct / bracketScore.total >= 0.5 ? "text-accent" :
+                "text-red-400"
+              }`}>
+                {bracketScore.correct}/{bracketScore.total}
+              </span>
+              <span className="text-xs text-muted">correct</span>
+              <span className={`text-xs font-mono ${
+                bracketScore.correct / bracketScore.total >= 0.7 ? "text-green-400" :
+                bracketScore.correct / bracketScore.total >= 0.5 ? "text-accent" :
+                "text-red-400"
+              }`}>
+                ({(bracketScore.correct / bracketScore.total * 100).toFixed(1)}%)
+              </span>
+            </div>
+            <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  bracketScore.correct / bracketScore.total >= 0.7 ? "bg-green-400" :
+                  bracketScore.correct / bracketScore.total >= 0.5 ? "bg-accent" :
+                  "bg-red-400"
+                }`}
+                style={{ width: `${(bracketScore.correct / bracketScore.total) * 100}%` }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -1164,54 +1512,19 @@ export default function BracketPage() {
         </div>
       )}
 
-      {/* Simulation results */}
-      {simResults && (
-        <div className="mb-6 p-4 rounded-xl bg-card border border-card-border">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium">Monte Carlo Simulation (1,000 runs)</h3>
-            <button onClick={() => setSimResults(null)} className="text-muted hover:text-foreground">
-              <X size={14} />
-            </button>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-muted uppercase tracking-wider mb-2">Championship %</div>
-              <div className="space-y-1">
-                {simResults.championProbabilities.slice(0, 8).map((t) => (
-                  <div key={t.teamId} className="flex items-center justify-between text-xs">
-                    <span className="font-medium">{t.teamName}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-accent rounded-full" style={{ width: `${t.probability * 100}%` }} />
-                      </div>
-                      <span className="font-mono text-accent w-10 text-right">{(t.probability * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted uppercase tracking-wider mb-2">Final Four %</div>
-              <div className="space-y-1">
-                {simResults.finalFourProbabilities.slice(0, 8).map((t) => (
-                  <div key={t.teamId} className="flex items-center justify-between text-xs">
-                    <span className="font-medium">{t.teamName}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${t.probability * 100}%` }} />
-                      </div>
-                      <span className="font-mono text-blue-400 w-10 text-right">{(t.probability * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Region tabs */}
       <div className="flex items-center gap-1 mb-6 p-1 bg-card rounded-lg border border-card-border w-fit flex-wrap">
+        <button
+          onClick={() => setActiveRegion("Full Bracket")}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            activeRegion === "Full Bracket"
+              ? "bg-accent/15 text-accent"
+              : "text-muted hover:text-foreground"
+          }`}
+        >
+          Full Bracket
+        </button>
+        <div className="w-px h-4 bg-card-border mx-0.5" />
         {bracket.firstFour && bracket.firstFour.length > 0 && (
           <button
             onClick={() => setActiveRegion("First Four")}
@@ -1250,7 +1563,15 @@ export default function BracketPage() {
       </div>
 
       {/* Bracket view */}
-      {activeRegion === "First Four" ? (
+      {activeRegion === "Full Bracket" ? (
+        <FullBracketView
+          bracket={bracket}
+          displayPicks={displayPicks}
+          eliminatedTeams={eliminatedTeams}
+          isOfficialMode={isOfficialMode}
+          getMatchup={getMatchup}
+        />
+      ) : activeRegion === "First Four" ? (
         <div>
           <h3 className="text-sm font-medium text-muted mb-3 uppercase tracking-wider">
             First Four — Play-In Games
@@ -1271,6 +1592,7 @@ export default function BracketPage() {
                   slotId={`first_four_${i}`}
                   onPick={handlePick}
                   onAnalyze={setAnalysisMatchup}
+                  eliminatedTeams={bracketMode !== "actual" ? eliminatedTeams : undefined}
                 />
               </div>
             ))}
@@ -1295,6 +1617,7 @@ export default function BracketPage() {
                     slotId={slotId}
                     onPick={handlePick}
                     onAnalyze={setAnalysisMatchup}
+                    eliminatedTeams={bracketMode !== "actual" ? eliminatedTeams : undefined}
                   />
                 );
               })}
@@ -1319,6 +1642,7 @@ export default function BracketPage() {
                       slotId={slotId}
                       onPick={handlePick}
                       onAnalyze={setAnalysisMatchup}
+                      eliminatedTeams={bracketMode !== "actual" ? eliminatedTeams : undefined}
                     />
                   );
                 })}
@@ -1346,6 +1670,7 @@ export default function BracketPage() {
                       slotId={slotId}
                       onPick={handlePick}
                       onAnalyze={setAnalysisMatchup}
+                      eliminatedTeams={bracketMode !== "actual" ? eliminatedTeams : undefined}
                     />
                   );
                 })}
